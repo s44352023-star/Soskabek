@@ -1,210 +1,110 @@
-1. Backend Qismi (Node.js + Express + PostgreSQL)
-GET /tasks endpoint'ini query parametrlari (q, category_id, page, limit) bilan boyitamiz:
+1. Backend Sozlamalari (Render / Railway)
+Production muhitida backend xavfsiz va to'g'ri ishlashi uchun CORS va Environment variables quyidagicha sozlanishi shart:
 
+server.js (CORS'ni production frontend domeniga moslash)
 JavaScript
-// GET /tasks — Qidiruv, filtr va sahifalash bilan
-app.get('/tasks', autentifikatsiyaTalabQilish, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { q, category_id, page = 1, limit = 10 } = req.query;
+const express = require('express');
+const cors = require('cors');
+const app = express();
 
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
-    const offset = (pageNum - 1) * limitNum;
+// Ruxsat etilgan domenlar ro'yxati (Frontend qayerga deploy qilingan bo'lsa o'sha domen yoziladi)
+const allowedOrigins = [
+  'http://localhost:3000', // Local dev uchun
+  'https://sening-frontend-domen.vercel.app' // Vercel'dagi production domeningiz
+];
 
-    // Bazaviy so'rov (faqat joriy foydalanuvchiga tegishli)
-    let query = 'SELECT * FROM tasks WHERE user_id = $1';
-    let queryParams = [userId];
-    let paramIndex = 2;
-
-    // 1. Qidiruv bo'yicha (ILIKE sarlavha bo'yicha)
-    if (q) {
-      query += ` AND title ILIKE $${paramIndex}`;
-      queryParams.push(`%${q}%`);
-      paramIndex++;
-    }
-
-    // 2. Category bo'yicha filtr
-    if (category_id) {
-      query += ` AND category_id = $${paramIndex}`;
-      queryParams.push(category_id);
-      paramIndex++;
-    }
-
-    // 3. Sahifalash (LIMIT / OFFSET) va tartiblash
-    query += ` ORDER BY id DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    queryParams.push(limitNum, offset);
-
-    const tasks = await pool.query(query, queryParams);
-
-    // Umumiy sonini olish (sahifalash uchun foydali)
-    // Shu shartlar asosida umumiy elementlar sonini hisoblash ham mumkin
-    res.json(tasks.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server xatoligi' });
-  }
-});
-2. Frontend Qismi (React + Redux Toolkit)
-Redux Slice (taskSlice.js)
-JavaScript
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-
-export const fetchTasks = createAsyncThunk(
-  'tasks/fetchTasks',
-  async ({ search, categoryId, page }, thunkAPI) => {
-    const token = localStorage.getItem('token');
-    const params = new URLSearchParams();
-    
-    if (search) params.append('q', search);
-    if (categoryId) params.append('category_id', categoryId);
-    if (page) params.append('page', page);
-    params.append('limit', '5');
-
-    const response = await fetch(`http://localhost:5000/tasks?${params.toString()}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    return data;
-  }
-);
-
-const taskSlice = createSlice({
-  name: 'tasks',
-  initialState: {
-    items: [],
-    status: 'idle',
-    search: '',
-    categoryId: '',
-    page: 1,
-    error: null,
-  },
-  reducers: {
-    setSearch: (state, action) => {
-      state.search = action.payload;
-      state.page = 1; // Qidirganda 1-sahifaga qaytish
-    },
-    setCategory: (state, action) => {
-      state.categoryId = action.payload;
-      state.page = 1; // Filtr o'zgarganda 1-sahifaga qaytish
-    },
-    setPage: (state, action) => {
-      state.page = action.payload;
+app.use(cors({
+  origin: function (origin, callback) {
+    // Agar origin yo'q bo'lsa (masalan Postman yoki server-to-server so'rovlar) yoki ruxsat etilganlar ro'yxatida bo'lsa
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS siyosati bu domenga ruxsat bermaydi'));
     }
   },
-  extraReducers: (builder) => {
-    builder
-      .addCase(fetchTasks.pending, (state) => { state.status = 'loading'; })
-      .addCase(fetchTasks.fulfilled, (state, action) => {
-        state.status = 'succeeded';
-        state.items = action.payload;
-      })
-      .addCase(fetchTasks.rejected, (state, action) => {
-        state.status = 'failed';
-        state.error = action.error.message;
-      });
+  credentials: true
+}));
+
+app.use(express.json());
+
+// ... qolgan endpoint'lar (register, login, tasks va h.k.)
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server ${PORT}-portda ishlamoqda`));
+Hostingda (Render/Railway) o'rnatiladigan Environment Variables:
+DATABASE_URL — PostgreSQL bazasining tashqi ulanish havolasi (External Connection String)
+
+JWT_SECRET — Maxfiy kalit (string)
+
+PORT — Render yoki Railway avtomatik beradi (odatda kiritish shart emas, lekin process.env.PORT ishlatilishi shart)
+
+2. Frontend Sozlamalari (Vercel / Netlify)
+Frontend qismida API bazaviy manzilini qattiq kodlash (hardcode) o'rniga Environment variable orqali olish kerak.
+
+API chaqiruvlarini sozlash (src/api.js yoki config.js)
+JavaScript
+// Environment variable orqali backend manzilini olish
+// Vercel uchun: REACT_APP_API_URL (React uchun) yoki VITE_API_URL (Vite uchun)
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+export default API_URL;
+So'rov yuborishda:
+
+JavaScript
+import API_URL from './api';
+
+const response = await fetch(`${API_URL}/tasks`, {
+  headers: {
+    'Authorization': `Bearer ${token}`
   }
 });
+Hostingda (Vercel) o'rnatiladigan Environment Variable:
+REACT_APP_API_URL (yoki Vite ishlatsangiz VITE_API_URL) = [https://sening-backend-domen.onrender.com](https://sening-backend-domen.onrender.com)
 
-export const { setSearch, setCategory, setPage } = taskSlice.actions;
-export default taskSlice.reducer;
-Debounce va Filtr komponenti (TaskList.jsx)
-JavaScript
-import React, { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { fetchTasks, setSearch, setCategory, setPage } from './taskSlice';
+3. Yakuniy README.md Shabloni
+GitHub repository'ingizning asosiy sahifasidagi README.md faylini quyidagi ko'rinishda yangilang:
 
-function TaskList() {
-  const dispatch = useDispatch();
-  const { items, search, categoryId, page, status } = useSelector((state) => state.tasks);
-  
-  // Debounce uchun local state
-  const [inputValue, setInputValue] = useState(search);
-
-  // 400ms Debounce mexanizmi
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      dispatch(setSearch(inputValue));
-    }, 400);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [inputValue, dispatch]);
-
-  // Parametrlar o'zgarganda ma'lumotni qayta yuklash
-  useEffect(() => {
-    dispatch(fetchTasks({ search, categoryId, page }));
-  }, [dispatch, search, categoryId, page]);
-
-  return (
-    <div style={{ maxWidth: '600px', margin: '30px auto', padding: '20px' }}>
-      <h2>Vazifalar ro'yxati</h2>
-
-      {/* Qidiruv va Filtr boshqaruvlari */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <input
-          type="text"
-          placeholder="Sarlavha bo'yicha qidirish..."
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          style={{ flex: 1, padding: '8px' }}
-        />
-
-        <select
-          value={categoryId}
-          onChange={(e) => dispatch(setCategory(e.target.value))}
-          style={{ padding: '8px' }}
-        >
-          <option value="">Barcha kategoriyalar</option>
-          <option value="1">Ish (Work)</option>
-          <option value="2">Shaxsiy (Personal)</option>
-        </select>
-      </div>
-
-      {status === 'loading' && <p>Yuklanmoqda...</p>}
-
-      {/* Ro'yxat */}
-      <ul>
-        {items.map((task) => (
-          <li key={task.id} style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>
-            <strong>{task.title}</strong> — {task.description}
-          </li>
-        ))}
-      </ul>
-
-      {/* Sahifalash (Pagination) tugmalari */}
-      <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button 
-          disabled={page === 1} 
-          onClick={() => dispatch(setPage(page - 1))}
-          style={{ padding: '5px 15px' }}
-        >
-          Oldingi
-        </button>
-        <span>Sahifa: {page}</span>
-        <button 
-          onClick={() => dispatch(setPage(page + 1))}
-          style={{ padding: '5px 15px' }}
-        >
-          Keyingi
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export default TaskList;
-3. README.md (Holat checklist'i)
 Markdown
-# TaskFlow Loyihasi - Qidiruv va Sahifalash
+# TaskFlow — Full-Stack Task Management Application
 
-## Holat Checklist'i (Status Checklist)
-- [x] **GET /tasks** — `?q=...&category_id=...&page=...` query parametrlari qo'llab-quvvatlandi
-- [x] **ILIKE qidiruvi** — Katta-kichik harfga sezgir bo'lmagan sarlavha bo'yicha qidiruv ishlaydi
-- [x] **LIMIT / OFFSET** — PostgreSQL yordamida ma'lumotlarni sahifalash amalga oshirildi
-- [x] **Frontend Debounce** — Qidiruv maydoni 400ms kechikish (debounce) bilan ishlaydi
-- [x] **Category Dropdown** — Kategoriya bo'yicha filtr tanlash imkoniyati yaratildi
-- [x] **Redux Toolkit** — Holat (state) Redux yordamida boshqarildi
+TaskFlow bu foydalanuvchilarga o'z vazifalarini xavfsiz boshqarish, qidirish va filtrlash imkonini beruvchi zamonaviy veb-ilova. Loyiha to'liq to'liq (Full-Stack) tarzda ishlab chiqildi va production muhitiga deploy qilindi.
+
+## 🚀 Jonli Havolalar (Live Demos)
+- **Frontend (Vercel):** [https://taskflow-frontend.vercel.app](https://sening-frontend-domen.vercel.app)
+- **Backend (Render):** [https://taskflow-backend.onrender.com](https://sening-backend-domen.onrender.com)
+
+---
+
+## 🛠 Seksiyalar va Texnologiyalar (Tech Stack)
+* **Backend:** Node.js, Express.js, PostgreSQL, JWT (jsonwebtoken), bcrypt
+* **Frontend:** React, Redux Toolkit, CSS / UI Components
+* **Hosting:** 
+  * Backend: Render
+  * Frontend: Vercel
+  * Database: PostgreSQL (Neon / Render)
+
+---
+
+## ✅ Loyiha Holat Checklist'i (6/6 Bosqich)
+- [x] **1-bosqich:** Backend arxitekturasi va PostgreSQL baza ulanishi
+- [x] **2-bosqich:** JWT autentifikatsiya, bcrypt parol xavfsizligi va himoyalangan route'lar
+- [x] **3-bosqich:** Qidiruv (`ILIKE`), filtr (`category_id`) va sahifalash (`LIMIT / OFFSET`)
+- [x] **4-bosqich:** Frontend qismi, Login/Register formalari va `localStorage` boshqaruvi
+- [x] **5-bosqich:** Redux Toolkit yordamida global holat (state) va **400ms Debounce** qidiruv tizimi
+- [x] **6-bosqich:** Production deploy (Render + Vercel), CORS to'g'ri sozlanishi va jonli havolalar integratsiyasi
+
+---
+
+## ⚙️ Mahalliy ishga tushirish (Local Installation)
+
+Loyihani o'z kompyuteringizda ishga tushirish uchun:
+
+1. Repozitoriyani klonlang:
+   ```bash
+   git clone [https://github.com/username/TaskFlow.git](https://github.com/username/TaskFlow.git)
+Backend va Frontend papkalariga o'tib bog'liqliklarni o'rnating:
+
+Bash
+cd backend && npm install
+cd ../frontend && npm install
+.env fayllarini to'ldiring va serverlarni ishga tushiring.
