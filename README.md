@@ -1,292 +1,197 @@
-1. Backend Qismi (Node.js + Express)
-package.json uchun kerakli kutubxonalar
-JSON
-{
-  "dependencies": {
-    "bcrypt": "^5.1.1",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2",
-    "pg": "^8.11.3"
-  }
-}
-server.js (Asosiy backend fayli)
+1. Backend Qismi (Node.js + Express + PostgreSQL)
+GET /tasks endpoint'ini query parametrlari (q, category_id, page, limit) bilan boyitamiz:
+
 JavaScript
-require('dotenv').config();
-const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const { Pool } = require('pg');
-const cors = require('cors');
-
-const app = express();
-app.use(express.json());
-app.use(cors());
-
-// PostgreSQL ulanishi (Ma'lumotlar bazasi sozlamalari)
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-// JWT Sirli kaliti
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_key_123';
-
-// ----------------------------------------------------
-// MIDDLEWARE: Autentifikatsiyani talab qilish
-// ----------------------------------------------------
-const autentifikatsiyaTalabQilish = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401.json({ error: 'Token taqdim etilmadi yoki noto‘g‘ri formatda' });
-  }
-
-  const token = authHeader.split(' ')[1];
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // { userId: ... }
-    next();
-  } catch (err) {
-    return res.status(403.json({ error: 'Token yaroqsiz yoki muddati o‘tgan' });
-  }
-};
-
-// ----------------------------------------------------
-// ENDPOINTLAR
-// ----------------------------------------------------
-
-// 1. POST /register — Ro'yxatdan o'tish
-app.post('/register', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username va parol kiritilishi shart' });
-    }
-
-    // Foydalanuvchi mavjudligini tekshirish
-    const userCheck = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({ error: 'Bu foydalanuvchi allaqachon mavjud' });
-    }
-
-    // Parolni bcrypt orqali hash qilish
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Foydalanuvchini bazaga saqlash
-    const newUser = await pool.query(
-      'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username',
-      [username, hashedPassword]
-    );
-
-    res.status(201).json({
-      message: 'Muvaffaqiyatli ro‘yxatdan o‘tdingiz',
-      user: newUser.rows[0],
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server xatoligi' });
-  }
-});
-
-// 2. POST /login — Tizimga kirish
-app.post('/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-
-    const userResult = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    if (userResult.rows.length === 0) {
-      return res.status(400).json({ error: 'Foydalanuvchi topilmadi yoki parol xato' });
-    }
-
-    const user = userResult.rows[0];
-
-    // Parolni solishtirish
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Foydalanuvchi topilmadi yoki parol xato' });
-    }
-
-    // JWT token yaratish
-    const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, {
-      expiresIn: '1h',
-    });
-
-    res.json({ message: 'Muvaffaqiyatli kirdingiz', token });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server xatoligi' });
-  }
-});
-
-// 3. GET /tasks — Joriy foydalanuvchining vazifalarini olish (Himoyalangan)
+// GET /tasks — Qidiruv, filtr va sahifalash bilan
 app.get('/tasks', autentifikatsiyaTalabQilish, async (req, res) => {
   try {
     const userId = req.user.userId;
+    const { q, category_id, page = 1, limit = 10 } = req.query;
 
-    // Faqat joriy foydalanuvchiga tegishli tasklarni qaytarish
-    const tasks = await pool.query('SELECT * FROM tasks WHERE user_id = $1 ORDER BY id DESC', [userId]);
-    
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const offset = (pageNum - 1) * limitNum;
+
+    // Bazaviy so'rov (faqat joriy foydalanuvchiga tegishli)
+    let query = 'SELECT * FROM tasks WHERE user_id = $1';
+    let queryParams = [userId];
+    let paramIndex = 2;
+
+    // 1. Qidiruv bo'yicha (ILIKE sarlavha bo'yicha)
+    if (q) {
+      query += ` AND title ILIKE $${paramIndex}`;
+      queryParams.push(`%${q}%`);
+      paramIndex++;
+    }
+
+    // 2. Category bo'yicha filtr
+    if (category_id) {
+      query += ` AND category_id = $${paramIndex}`;
+      queryParams.push(category_id);
+      paramIndex++;
+    }
+
+    // 3. Sahifalash (LIMIT / OFFSET) va tartiblash
+    query += ` ORDER BY id DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    queryParams.push(limitNum, offset);
+
+    const tasks = await pool.query(query, queryParams);
+
+    // Umumiy sonini olish (sahifalash uchun foydali)
+    // Shu shartlar asosida umumiy elementlar sonini hisoblash ham mumkin
     res.json(tasks.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server xatoligi' });
   }
 });
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server ${PORT}-portda ishga tushdi`));
-2. Frontend Qismi (React)
-Auth.jsx (Login va Register formalari)
+2. Frontend Qismi (React + Redux Toolkit)
+Redux Slice (taskSlice.js)
 JavaScript
-import React, { useState } from 'react';
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
-function Auth({ onLoginSuccess }) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+export const fetchTasks = createAsyncThunk(
+  'tasks/fetchTasks',
+  async ({ search, categoryId, page }, thunkAPI) => {
+    const token = localStorage.getItem('token');
+    const params = new URLSearchParams();
+    
+    if (search) params.append('q', search);
+    if (categoryId) params.append('category_id', categoryId);
+    if (page) params.append('page', page);
+    params.append('limit', '5');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+    const response = await fetch(`http://localhost:5000/tasks?${params.toString()}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    return data;
+  }
+);
 
-    const endpoint = isLogin ? '/login' : '/register';
-
-    try {
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Xatolik yuz berdi');
-      }
-
-      if (isLogin) {
-        // Tokenni localStorage'da saqlash
-        localStorage.setItem('token', data.token);
-        onLoginSuccess();
-      } else {
-        alert('Ro‘yxatdan o‘tdingiz! Endi tizimga kiring.');
-        setIsLogin(true);
-      }
-    } catch (err) {
-      setError(err.message);
+const taskSlice = createSlice({
+  name: 'tasks',
+  initialState: {
+    items: [],
+    status: 'idle',
+    search: '',
+    categoryId: '',
+    page: 1,
+    error: null,
+  },
+  reducers: {
+    setSearch: (state, action) => {
+      state.search = action.payload;
+      state.page = 1; // Qidirganda 1-sahifaga qaytish
+    },
+    setCategory: (state, action) => {
+      state.categoryId = action.payload;
+      state.page = 1; // Filtr o'zgarganda 1-sahifaga qaytish
+    },
+    setPage: (state, action) => {
+      state.page = action.payload;
     }
-  };
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchTasks.pending, (state) => { state.status = 'loading'; })
+      .addCase(fetchTasks.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        state.items = action.payload;
+      })
+      .addCase(fetchTasks.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.error.message;
+      });
+  }
+});
 
-  return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc' }}>
-      <h2>{isLogin ? 'Tizimga kirish' : 'Ro‘yxatdan o‘tish'}</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '10px' }}>
-          <label>Username:</label><br />
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            style={{ width: '100%', padding: '8px' }}
-          />
-        </div>
-        
-        <div style={{ marginBottom: '15px' }}>
-          <label>Parol:</label><br />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: '8px' }}
-          />
-        </div>
-
-        <button type="submit" style={{ width: '100%', padding: '10px', background: '#007BFF', color: '#fff', border: 'none' }}>
-          {isLogin ? 'Kirish' : 'Ro‘yxatdan o‘tish'}
-        </button>
-      </form>
-
-      <p style={{ marginTop: '15px', textAlign: 'center' }}>
-        {isLogin ? 'Hisobingiz yo‘qmi?' : 'Hisobingiz bormi?'}{' '}
-        <span
-          onClick={() => setIsLogin(!isLogin)}
-          style={{ color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}
-        >
-          {isLogin ? 'Ro‘yxatdan o‘ting' : 'Tizimga kiring'}
-        </span>
-      </p>
-    </div>
-  );
-}
-
-export default Auth;
-TaskList.jsx (Himoyalangan so'rovlar orqali Tasklarni olish)
+export const { setSearch, setCategory, setPage } = taskSlice.actions;
+export default taskSlice.reducer;
+Debounce va Filtr komponenti (TaskList.jsx)
 JavaScript
 import React, { useEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchTasks, setSearch, setCategory, setPage } from './taskSlice';
 
-function TaskList({ onLogout }) {
-  const [tasks, setTasks] = useState([]);
-  const [error, setError] = useState('');
+function TaskList() {
+  const dispatch = useDispatch();
+  const { items, search, categoryId, page, status } = useSelector((state) => state.tasks);
+  
+  // Debounce uchun local state
+  const [inputValue, setInputValue] = useState(search);
 
+  // 400ms Debounce mexanizmi
   useEffect(() => {
-    const fetchTasks = async () => {
-      const token = localStorage.getItem('token');
+    const handler = setTimeout(() => {
+      dispatch(setSearch(inputValue));
+    }, 400);
 
-      try {
-        const response = await fetch('http://localhost:5000/tasks', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`, // Tokenni har bir himoyalangan so'rovga qo'shish
-          },
-        });
-
-        if (response.status === 401 || response.status === 403) {
-          onLogout(); // Token yaroqsiz bo'lsa chiqib ketish
-          return;
-        }
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error);
-
-        setTasks(data);
-      } catch (err) {
-        setError(err.message);
-      }
+    return () => {
+      clearTimeout(handler);
     };
+  }, [inputValue, dispatch]);
 
-    fetchTasks();
-  }, [onLogout]);
+  // Parametrlar o'zgarganda ma'lumotni qayta yuklash
+  useEffect(() => {
+    dispatch(fetchTasks({ search, categoryId, page }));
+  }, [dispatch, search, categoryId, page]);
 
   return (
-    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px' }}>
-      <h2>Mening Vazifalarim</h2>
-      <button onClick={onLogout} style={{ float: 'right', padding: '5px 10px', background: 'red', color: '#fff', border: 'none' }}>
-        Chiqish
-      </button>
-      
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      
+    <div style={{ maxWidth: '600px', margin: '30px auto', padding: '20px' }}>
+      <h2>Vazifalar ro'yxati</h2>
+
+      {/* Qidiruv va Filtr boshqaruvlari */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder="Sarlavha bo'yicha qidirish..."
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          style={{ flex: 1, padding: '8px' }}
+        />
+
+        <select
+          value={categoryId}
+          onChange={(e) => dispatch(setCategory(e.target.value))}
+          style={{ padding: '8px' }}
+        >
+          <option value="">Barcha kategoriyalar</option>
+          <option value="1">Ish (Work)</option>
+          <option value="2">Shaxsiy (Personal)</option>
+        </select>
+      </div>
+
+      {status === 'loading' && <p>Yuklanmoqda...</p>}
+
+      {/* Ro'yxat */}
       <ul>
-        {tasks.length === 0 ? (
-          <p>Hozircha vazifalar yo'q.</p>
-        ) : (
-          tasks.map((task) => (
-            <li key={task.id} style={{ margin: '10px 0', padding: '10px', background: '#f9f9f9', border: '1px solid #ddd' }}>
-              <strong>{task.title}</strong> — {task.description}
-            </li>
-          ))
-        )}
+        {items.map((task) => (
+          <li key={task.id} style={{ padding: '10px', borderBottom: '1px solid #ddd' }}>
+            <strong>{task.title}</strong> — {task.description}
+          </li>
+        ))}
       </ul>
+
+      {/* Sahifalash (Pagination) tugmalari */}
+      <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button 
+          disabled={page === 1} 
+          onClick={() => dispatch(setPage(page - 1))}
+          style={{ padding: '5px 15px' }}
+        >
+          Oldingi
+        </button>
+        <span>Sahifa: {page}</span>
+        <button 
+          onClick={() => dispatch(setPage(page + 1))}
+          style={{ padding: '5px 15px' }}
+        >
+          Keyingi
+        </button>
+      </div>
     </div>
   );
 }
@@ -294,12 +199,12 @@ function TaskList({ onLogout }) {
 export default TaskList;
 3. README.md (Holat checklist'i)
 Markdown
-# TaskFlow Loyihasi
+# TaskFlow Loyihasi - Qidiruv va Sahifalash
 
 ## Holat Checklist'i (Status Checklist)
-- [x] **POST /register** — Parolni `bcrypt.hash()` yordamida xavfsiz saqlash
-- [x] **POST /login** — `bcrypt.compare()` orqali parolni tekshirish va JWT token qaytarish
-- [x] **autentifikatsiyaTalabQilish** — `Authorization: Bearer <token>` header'ini tekshiruvchi middleware
-- [x] **GET /tasks** — `WHERE user_id = $1` orqali faqat joriy foydalanuvchi ma'lumotlarini qaytarish
-- [x] **Frontend Login/Register formalari** — React yordamida interfeys yaratish va token'ni `localStorage`'da saqlash
-- [x] **Himoyalangan so'rovlar** — Barcha so'rovlarga `Authorization` header'ini avtomatik
+- [x] **GET /tasks** — `?q=...&category_id=...&page=...` query parametrlari qo'llab-quvvatlandi
+- [x] **ILIKE qidiruvi** — Katta-kichik harfga sezgir bo'lmagan sarlavha bo'yicha qidiruv ishlaydi
+- [x] **LIMIT / OFFSET** — PostgreSQL yordamida ma'lumotlarni sahifalash amalga oshirildi
+- [x] **Frontend Debounce** — Qidiruv maydoni 400ms kechikish (debounce) bilan ishlaydi
+- [x] **Category Dropdown** — Kategoriya bo'yicha filtr tanlash imkoniyati yaratildi
+- [x] **Redux Toolkit** — Holat (state) Redux yordamida boshqarildi
