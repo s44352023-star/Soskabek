@@ -1,215 +1,305 @@
-1. Backend Qismini Yangilash (CORS sozlamasi)
-Backend (server.js) fayliga cors middleware'ini qo'shamiz va .env orqali API manzillarini boshqaramiz.
-
-.env (Backend)
-Фрагмент кода
-PORT=5000
-DATABASE_URL=postgresql://postgres:password@localhost:5432/taskflow
-FRONTEND_URL=http://localhost:3000
-server.js ga qo'shiladigan o'zgarishlar:
+1. Backend Qismi (Node.js + Express)
+package.json uchun kerakli kutubxonalar
+JSON
+{
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.3"
+  }
+}
+server.js (Asosiy backend fayli)
 JavaScript
-const express = require('express');
-const cors = require('cors'); // <-- CORS ni chaqiramiz
-const pool = require('./db');
 require('dotenv').config();
+const express = require('express');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { Pool } = require('pg');
+const cors = require('cors');
 
 const app = express();
-
-// CORS ni to'g'ri sozlash (Faqat ruxsat etilganfrontend URL'ga ruxsat berish)
-const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,
-};
-
-app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cors());
 
-// ... (qolgan CRUD marshrutlar o'zgarishsiz qoladi)
-2. Frontend Fayllari Strukturasi (React + Redux Toolkit)
-Plaintext
-frontend/
-├── .env
-├── package.json
-└── src/
-    ├── app/
-    │   └── store.js
-    ├── features/
-    │   └── tasksSlice.js
-    ├── components/
-    │   └── TaskList.jsx
-    ├── App.js
-    └── index.js
-3. Frontend Konfiguratsiyalari va Kodlari
-.env (Frontend - React loyihasining ildiz qismida)
-Eslatma: React boshlang'ich muhitiga qarab (Create React App yoki Vite) o'zgaruvchi nomi farq qilishi mumkin. Create React App uchun REACT_APP_ prefiksi ishlatiladi.
-
-Фрагмент кода
-REACT_APP_API_URL=http://localhost:5000
-src/app/store.js (Redux Store)
-JavaScript
-import { configureStore } from '@reduxjs/toolkit';
-import tasksReducer from '../features/tasksSlice';
-
-export const store = configureStore({
-  reducer: {
-    tasks: tasksReducer,
-  },
-});
-src/features/tasksSlice.js (createAsyncThunk bilan tasksSlice)
-JavaScript
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-
-// API manzilini .env fayldan olish (kodga qattiq yozilmagan)
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
-// createAsyncThunk orqali GET /tasks so'rovini bajarish
-export const tasklarniOlish = createAsyncThunk(
-  'tasks/tasklarniOlish',
-  async (_, { rejectWithValue }) => {
-    try {
-      const response = await fetch(`${API_URL}/tasks`);
-      if (!response.ok) {
-        throw new Error('Serverdan maʼlumotlarni olishda xatolik yuz berdi!');
-      }
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      return rejectWithValue(error.message);
-    }
-  }
-);
-
-const tasksSlice = createSlice({
-  name: 'tasks',
-  initialState: {
-    list: [],
-    loading: false,
-    error: null,
-  },
-  reducers: {},
-  extraReducers: (builder) => {
-    builder
-      // Pending holati (yuklanmoqda)
-      .cases([tasklarniOlish.pending], (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      // Fulfilled holati (muvaffaqiyatli yakunlandi)
-      .addCase(tasklarniOlish.fulfilled, (state, action) => {
-        state.loading = false;
-        state.list = action.payload;
-      })
-      // Rejected holati (xato yuz berdi)
-      .addCase(tasklarniOlish.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      });
-  },
+// PostgreSQL ulanishi (Ma'lumotlar bazasi sozlamalari)
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
 });
 
-export default tasksSlice.reducer;
-src/components/TaskList.jsx (Tasklar ro'yxati komponenti)
-JavaScript
-import React, { useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { tasklarniOlish } from '../features/tasksSlice';
+// JWT Sirli kaliti
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_key_123';
 
-const TaskList = () => {
-  const dispatch = useDispatch();
-  const { list: tasks, loading, error } = useSelector((state) => state.tasks);
-
-  useEffect(() => {
-    dispatch(tasklarniOlish());
-  }, [dispatch]);
-
-  if (loading) {
-    return <div style={{ textAlign: 'center', padding: '20px' }}>⏳ Yuklanmoqda...</div>;
+// ----------------------------------------------------
+// MIDDLEWARE: Autentifikatsiyani talab qilish
+// ----------------------------------------------------
+const autentifikatsiyaTalabQilish = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401.json({ error: 'Token taqdim etilmadi yoki noto‘g‘ri formatda' });
   }
 
-  if (error) {
-    return <div style={{ color: 'red', textAlign: 'center', padding: '20px' }}>❌ Xatolik: {error}</div>;
-  }
+  const token = authHeader.split(' ')[1];
 
-  return (
-    <div style={{ maxWidth: '600px', margin: '20px auto', fontFamily: 'Arial, sans-serif' }}>
-      <h2>📋 Vazifalar Ro'yxati</h2>
-      {tasks.length === 0 ? (
-        <p>Hozircha vazifalar mavjud emas.</p>
-      ) : (
-        <ul style={{ listStyleType: 'none', padding: 0 }}>
-          {tasks.map((task) => (
-            <li
-              key={task.id}
-              style={{
-                background: '#f9f9f9',
-                border: '1px solid #ddd',
-                padding: '12px 16px',
-                marginBottom: '10px',
-                borderRadius: '6px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <div>
-                <h4 style={{ margin: '0 0 5px 0', textDecoration: task.is_completed ? 'line-through' : 'none' }}>
-                  {task.title}
-                </h4>
-                <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>{task.description}</p>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                {/* JOIN orqali kelgan category_nomi */}
-                <span
-                  style={{
-                    background: '#e0e0e0',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  {task.category_nomi || 'Kategoriyasiz'}
-                </span>
-                <div style={{ fontSize: '11px', marginTop: '5px', color: task.is_completed ? 'green' : 'orange' }}>
-                  {task.is_completed ? 'Bajarilgan' : 'Bajarilmoqda'}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded; // { userId: ... }
+    next();
+  } catch (err) {
+    return res.status(403.json({ error: 'Token yaroqsiz yoki muddati o‘tgan' });
+  }
 };
 
-export default TaskList;
-src/App.js
-JavaScript
-import React from 'react';
-import TaskList from './components/TaskList';
+// ----------------------------------------------------
+// ENDPOINTLAR
+// ----------------------------------------------------
 
-function App() {
+// 1. POST /register — Ro'yxatdan o'tish
+app.post('/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username va parol kiritilishi shart' });
+    }
+
+    // Foydalanuvchi mavjudligini tekshirish
+    const userCheck = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (userCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Bu foydalanuvchi allaqachon mavjud' });
+    }
+
+    // Parolni bcrypt orqali hash qilish
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Foydalanuvchini bazaga saqlash
+    const newUser = await pool.query(
+      'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username',
+      [username, hashedPassword]
+    );
+
+    res.status(201).json({
+      message: 'Muvaffaqiyatli ro‘yxatdan o‘tdingiz',
+      user: newUser.rows[0],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server xatoligi' });
+  }
+});
+
+// 2. POST /login — Tizimga kirish
+app.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    const userResult = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Foydalanuvchi topilmadi yoki parol xato' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Parolni solishtirish
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Foydalanuvchi topilmadi yoki parol xato' });
+    }
+
+    // JWT token yaratish
+    const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, {
+      expiresIn: '1h',
+    });
+
+    res.json({ message: 'Muvaffaqiyatli kirdingiz', token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server xatoligi' });
+  }
+});
+
+// 3. GET /tasks — Joriy foydalanuvchining vazifalarini olish (Himoyalangan)
+app.get('/tasks', autentifikatsiyaTalabQilish, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Faqat joriy foydalanuvchiga tegishli tasklarni qaytarish
+    const tasks = await pool.query('SELECT * FROM tasks WHERE user_id = $1 ORDER BY id DESC', [userId]);
+    
+    res.json(tasks.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server xatoligi' });
+  }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server ${PORT}-portda ishga tushdi`));
+2. Frontend Qismi (React)
+Auth.jsx (Login va Register formalari)
+JavaScript
+import React, { useState } from 'react';
+
+function Auth({ onLoginSuccess }) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    const endpoint = isLogin ? '/login' : '/register';
+
+    try {
+      const response = await fetch(`http://localhost:5000${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Xatolik yuz berdi');
+      }
+
+      if (isLogin) {
+        // Tokenni localStorage'da saqlash
+        localStorage.setItem('token', data.token);
+        onLoginSuccess();
+      } else {
+        alert('Ro‘yxatdan o‘tdingiz! Endi tizimga kiring.');
+        setIsLogin(true);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
-    <div className="App">
-      <header style={{ textAlign: 'center', padding: '20px', background: '#282c34', color: 'white' }}>
-        <h1>TaskFlow — Boshqaruv Paneli</h1>
-      </header>
-      <main>
-        <TaskList />
-      </main>
+    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc' }}>
+      <h2>{isLogin ? 'Tizimga kirish' : 'Ro‘yxatdan o‘tish'}</h2>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: '10px' }}>
+          <label>Username:</label><br />
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+            style={{ width: '100%', padding: '8px' }}
+          />
+        </div>
+        
+        <div style={{ marginBottom: '15px' }}>
+          <label>Parol:</label><br />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            style={{ width: '100%', padding: '8px' }}
+          />
+        </div>
+
+        <button type="submit" style={{ width: '100%', padding: '10px', background: '#007BFF', color: '#fff', border: 'none' }}>
+          {isLogin ? 'Kirish' : 'Ro‘yxatdan o‘tish'}
+        </button>
+      </form>
+
+      <p style={{ marginTop: '15px', textAlign: 'center' }}>
+        {isLogin ? 'Hisobingiz yo‘qmi?' : 'Hisobingiz bormi?'}{' '}
+        <span
+          onClick={() => setIsLogin(!isLogin)}
+          style={{ color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          {isLogin ? 'Ro‘yxatdan o‘ting' : 'Tizimga kiring'}
+        </span>
+      </p>
     </div>
   );
 }
 
-export default App;
-4. README.md (Holat Checklist'i Yangilanishi)
-Markdown
-# TaskFlow Loyihasi Holat Checklist'i
+export default Auth;
+TaskList.jsx (Himoyalangan so'rovlar orqali Tasklarni olish)
+JavaScript
+import React, { useEffect, useState } from 'react';
 
-- [x] Backend API: `schema.sql`, `users`, `categories`, `tasks` jadvallari yaratildi
-- [x] Backend API: Express va `pg` yordamida CRUD amallari bajarildi (`GET /tasks` da `category_nomi` qo'shildi)
-- [x] Backend API: `DELETE /categories/:id` da bog'liq tasklar bor-yo'qligi tekshirilib, `400` xato qaytarish mexanizmi qo'shildi
-- [x] Backend API: `cors` middleware to'g'ri origin bilan sozlandi
-- [x] Frontend: `.env` orqali `REACT_APP_API_URL` manzili sozlandi
-- [x] Frontend: Redux Toolkit va `createAsyncThunk` yordamida `tasksSlice` yaratildi (pending, fulfilled, rejected holatlari boshqarildi)
-- [x] Frontend: Komponentlar orqali tasklar ro'yxati `category_nomi` bilan birgalikda ekr
+function TaskList({ onLogout }) {
+  const [tasks, setTasks] = useState([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      const token = localStorage.getItem('token');
+
+      try {
+        const response = await fetch('http://localhost:5000/tasks', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`, // Tokenni har bir himoyalangan so'rovga qo'shish
+          },
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          onLogout(); // Token yaroqsiz bo'lsa chiqib ketish
+          return;
+        }
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+
+        setTasks(data);
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
+    fetchTasks();
+  }, [onLogout]);
+
+  return (
+    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px' }}>
+      <h2>Mening Vazifalarim</h2>
+      <button onClick={onLogout} style={{ float: 'right', padding: '5px 10px', background: 'red', color: '#fff', border: 'none' }}>
+        Chiqish
+      </button>
+      
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      
+      <ul>
+        {tasks.length === 0 ? (
+          <p>Hozircha vazifalar yo'q.</p>
+        ) : (
+          tasks.map((task) => (
+            <li key={task.id} style={{ margin: '10px 0', padding: '10px', background: '#f9f9f9', border: '1px solid #ddd' }}>
+              <strong>{task.title}</strong> — {task.description}
+            </li>
+          ))
+        )}
+      </ul>
+    </div>
+  );
+}
+
+export default TaskList;
+3. README.md (Holat checklist'i)
+Markdown
+# TaskFlow Loyihasi
+
+## Holat Checklist'i (Status Checklist)
+- [x] **POST /register** — Parolni `bcrypt.hash()` yordamida xavfsiz saqlash
+- [x] **POST /login** — `bcrypt.compare()` orqali parolni tekshirish va JWT token qaytarish
+- [x] **autentifikatsiyaTalabQilish** — `Authorization: Bearer <token>` header'ini tekshiruvchi middleware
+- [x] **GET /tasks** — `WHERE user_id = $1` orqali faqat joriy foydalanuvchi ma'lumotlarini qaytarish
+- [x] **Frontend Login/Register formalari** — React yordamida interfeys yaratish va token'ni `localStorage`'da saqlash
+- [x] **Himoyalangan so'rovlar** — Barcha so'rovlarga `Authorization` header'ini avtomatik
