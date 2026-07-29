@@ -1,261 +1,253 @@
-1. Loyiha strukturasi (App.jsx)
-Quyida barcha marshrutlar va komponentlar bog'liqligi keltirilgan:
+1. Context'larni yaratish va Custom Hook'lar
+Barcha Context'larni bir faylda yoki alohida modullarda yozish mumkin. Quyida barchasi bitta tuzilmada jamlangan.
 
 JavaScript
-import React, { useState, createContext, useContext } from 'react';
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  NavLink,
-  Link,
-  useParams,
-  useSearchParams,
-  useNavigate,
-  Outlet,
-  Navigate
-} from 'react-router-dom';
+import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
 
-// --- Auth Context (Protected Route uchun imitatsiya) ---
-const AuthContext = createContext(null);
+// ==========================================
+// 1. USER CONTEXT
+// ==========================================
+const UserContext = createContext(null);
 
-function AuthProvider({ children }) {
-  const [user, setUser] = useState(null); // null yoki { name: 'Admin' }
-
-  const login = (callback) => {
-    setUser({ name: 'Talaba' });
-    callback();
-  };
-
-  const logout = (callback) => {
-    setUser(null);
-    callback();
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-function useAuth() {
-  return useContext(AuthContext);
-}
-
-// --- Himoyalangan yo'l (Protected Route) ---
-function ProtectedRoute({ children }) {
-  const { user } = useAuth();
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
-}
-
-// --- Asosiy Layout (Navbar va Footer) ---
-function Layout() {
-  const activeStyle = ({ isActive }) => ({
-    color: isActive ? '#ff4757' : '#2f3542',
-    fontWeight: isActive ? 'bold' : 'normal',
-    textDecoration: 'none',
-    marginRight: '15px'
+export const UserProvider = ({ children }) => {
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('user');
+    return saved ? JSON.parse(saved) : null;
   });
 
-  return (
-    <div style={{ fontFamily: 'Arial, sans-serif', padding: '20px' }}>
-      <header style={{ marginBottom: '20px', borderBottom: '1px solid #ddd', paddingBottom: '10px' }}>
-        <nav>
-          <NavLink to="/" style={activeStyle}>Bosh sahifa</NavLink>
-          <NavLink to="/kurslar" style={activeStyle}>Kurslar</NavLink>
-          <NavLink to="/qidir" style={activeStyle}>Qidiruv</NavLink>
-          <NavLink to="/profil" style={activeStyle}>Profil (Protected)</NavLink>
-        </nav>
-      </header>
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('user');
+    }
+  }, [user]);
 
-      <main>
-        <Outlet />
-      </main>
-    </div>
-  );
-}
+  const login = (userData) => setUser(userData);
+  const logout = () => setUser(null);
 
-// --- 1. Bosh sahifa (/) ---
-function Home() {
-  return (
-    <div>
-      <h2>Bosh sahifaga xush kelibsiz!</h2>
-      <p>React Router imkoniyatlarini o'rganish uchun mo'ljallangan namuna.</p>
-    </div>
-  );
-}
+  const value = useMemo(() => ({ user, login, logout }), [user]);
 
-// --- 2. Kurslar ro'yxati (/kurslar) ---
-function Kurslar() {
-  const kurslarList = [
-    { id: 1, title: 'React.js 0 dan boshlovchilarga' },
-    { id: 2, title: 'Advanced JavaScript' },
-    { id: 3, title: 'UI/UX Dizayn asoslari' },
-  ];
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+};
 
-  return (
-    <div>
-      <h2>Bizning kurslar</h2>
-      <ul>
-        {kurslarList.map(kurs => (
-          <li key={kurs.id} style={{ margin: '10px 0' }}>
-            <Link to={`/kurslar/${kurs.id}`}>{kurs.title}</Link>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+export const useUser = () => {
+  const context = useContext(UserContext);
+  if (!context) {
+    throw new Error('useUser hooki UserProvider ichida ishlatilishi shart!');
+  }
+  return context;
+};
 
-// --- 3. Kurs tafsilotlari (/kurslar/:id) ---
-function KursDetay() {
-  const { id } = useParams();
-  const navigate = useNavigate();
+// ==========================================
+// 2. THEME CONTEXT
+// ==========================================
+const ThemeContext = createContext(null);
 
-  return (
-    <div>
-      <h3>Kurs ID raqami: {id}</h3>
-      <p>Bu yerda {id}-kurs haqida batafsil ma'lumotlar joylashgan.</p>
-      <button 
-        onClick={() => navigate(-1)} 
-        style={{ padding: '8px 15px', cursor: 'pointer' }}
-      >
-        Orqaga qaytish
-      </button>
-    </div>
-  );
-}
+export const ThemeProvider = ({ children }) => {
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'light';
+  });
 
-// --- 4. Qidiruv sahifasi (?q=&p=) ---
-function Qidiruv() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const query = searchParams.get('q') || '';
-  const page = searchParams.get('p') || '1';
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
-  const handleSearchChange = (e) => {
-    const val = e.target.value;
-    setSearchParams({ q: val, p: page });
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const nextP = () => {
-    setSearchParams({ q: query, p: Number(page) + 1 });
-  };
+  const value = useMemo(() => ({ theme, toggleTheme }), [theme]);
 
-  return (
-    <div>
-      <h2>Qidiruv sahifasi</h2>
-      <input 
-        type="text" 
-        value={query} 
-        onChange={handleSearchChange} 
-        placeholder="Nimani qidiryapsiz?" 
-        style={{ padding: '8px', width: '300px' }}
-      />
-      <p>Natijalar (Qidiruv so'zi: <b>{query}</b>, Sahifa: <b>{page}</b>)</p>
-      <button onClick={nextP} style={{ padding: '5px 10px' }}>Keyingi sahifa</button>
-    </div>
-  );
-}
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+};
 
-// --- 5. Profil sahifasi (Protected) ---
-function Profil() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme hooki ThemeProvider ichida ishlatilishi shart!');
+  }
+  return context;
+};
 
-  return (
-    <div>
-      <h2>Foydalanuvchi profili</h2>
-      <p>Xush kelibsiz, <b>{user?.name}</b>!</p>
-      <button 
-        onClick={() => logout(() => navigate('/'))}
-        style={{ padding: '8px 15px', backgroundColor: '#ff4757', color: '#fff', border: 'none', cursor: 'pointer' }}
-      >
-        Chiqish (Logout)
-      </button>
-    </div>
-  );
-}
+// ==========================================
+// 3. CART CONTEXT
+// ==========================================
+const CartContext = createContext(null);
 
-// --- 6. Login sahifasi ---
-function Login() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
+export const CartProvider = ({ children }) => {
+  const [cart, setCart] = useState([]);
 
-  const handleLogin = () => {
-    login(() => {
-      navigate('/profil', { replace: true });
+  const addToCart = (product) => {
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [...prev, { ...product, quantity: 1 }];
     });
   };
 
+  const removeFromCart = (productId) => {
+    setCart((prev) => prev.filter((item) => item.id !== productId));
+  };
+
+  const clearCart = () => setCart([]);
+
+  const total = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, [cart]);
+
+  const value = useMemo(
+    () => ({ cart, addToCart, removeFromCart, clearCart, total }),
+    [cart, total]
+  );
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+};
+
+export const useCart = () => {
+  const context = useContext(CartContext);
+  if (!context) {
+    throw new Error('useCart hooki CartProvider ichida ishlatilishi shart!');
+  }
+  return context;
+};
+2. UI Komponentlar
+Header Komponenti
+Bevosita useUser, useTheme va useCart ma'lumotlarini olib ko'rsatadi.
+
+JavaScript
+import React from 'react';
+import { useUser, useTheme, useCart } from './contextPath';
+
+export const Header = () => {
+  const { user, login, logout } = useUser();
+  const { theme, toggleTheme } = useTheme();
+  const { cart } = useCart();
+
+  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+
   return (
-    <div style={{ padding: '20px' }}>
-      <h2>Tizimga kirish</h2>
-      <p>Profil sahifasini ko'rish uchun avval kiring.</p>
-      <button 
-        onClick={handleLogin}
-        style={{ padding: '10px 20px', backgroundColor: '#2ed573', color: '#fff', border: 'none', cursor: 'pointer' }}
-      >
-        Kirish (Login)
-      </button>
+    <header className={`header ${theme}`}>
+      <h1>Mening Do'konim</h1>
+      
+      <nav>
+        <span>Savatcha: {totalItems} ta mahsulot</span>
+        <button onClick={toggleTheme}>
+          Mavzu: {theme === 'light' ? '🌞 Yorug\'' : '🌙 Qorong\'i'}
+        </button>
+
+        {user ? (
+          <div>
+            <span>Salom, {user.name}</span>
+            <button onClick={logout}>Chiqish</button>
+          </div>
+        ) : (
+          <button onClick={() => login({ name: 'Ali' })}>Kirish</button>
+        )}
+      </nav>
+    </header>
+  );
+};
+Mahsulot Kartochkasi
+Bevosita useCart orqali ishlaydi.
+
+JavaScript
+import React from 'react';
+import { useCart } from './contextPath';
+
+export const ProductCard = ({ product }) => {
+  const { addToCart } = useCart();
+
+  return (
+    <div className="product-card">
+      <h3>{product.name}</h3>
+      <p>{product.price.toLocaleString()} so'm</p>
+      <button onClick={() => addToCart(product)}>Savatchaga qo'shish</button>
     </div>
   );
-}
+};
+Savatcha Sahifasi
+Mahsulotlar ro'yxati va umumiy summani ko'rsatadi.
 
-// --- 7. 404 Sahifasi ---
-function NotFound() {
+JavaScript
+import React from 'react';
+import { useCart } from './contextPath';
+
+export const CartPage = () => {
+  const { cart, removeFromCart, clearCart, total } = useCart();
+
+  if (cart.length === 0) {
+    return <h2>Savatchangiz bo'sh</h2>;
+  }
+
   return (
-    <div style={{ textAlign: 'center', padding: '50px' }}>
-      <h1>404</h1>
-      <p>Sahifa topilmadi!</p>
-      <Link to="/">Bosh sahifaga qaytish</Link>
+    <div className="cart-page">
+      <h2>Savatcha</h2>
+      <ul>
+        {cart.map((item) => (
+          <li key={item.id}>
+            <span>{item.name} ({item.quantity} dona)</span>
+            <span>{(item.price * item.quantity).toLocaleString()} so'm</span>
+            <button onClick={() => removeFromCart(item.id)}>O'chirish</button>
+          </li>
+        ))}
+      </ul>
+      
+      <div className="cart-summary">
+        <h3>Jami: {total.toLocaleString()} so'm</h3>
+        <button onClick={clearCart}>Savatchani tozalash</button>
+      </div>
     </div>
   );
-}
+};
+3. Ilovani Birlashtirish (App.jsx)
+Barcha Provider'larni to'g'ri tartibda o'rash muhim:
 
-// --- Asosiy App Komponenti ---
+JavaScript
+import React from 'react';
+import { UserProvider, ThemeProvider, CartProvider } from './contextPath';
+import { Header } from './Header';
+import { ProductCard } from './ProductCard';
+import { CartPage } from './CartPage';
+
+const sampleProduct = { id: 1, name: 'Smartfon', price: 2500000 };
+
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Layout va Nested Routes */}
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="kurslar" element={<Kurslar />} />
-            <Route path="kurslar/:id" element={<KursDetay />} />
-            <Route path="qidir" element={<Qidiruv />} />
-            
-            {/* Protected Route */}
-            <Route 
-              path="profil" 
-              element={
-                <ProtectedRoute>
-                  <Profil />
-                </ProtectedRoute>
-              } 
-            />
-          </Route>
-
-          <Route path="/login" element={<Login />} />
-
-          {/* 404 Not Found */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <ThemeProvider>
+      <UserProvider>
+        <CartProvider>
+          <div className="app">
+            <Header />
+            <main>
+              <ProductCard product={sampleProduct} />
+              <CartPage />
+            </main>
+          </div>
+        </CartProvider>
+      </UserProvider>
+    </ThemeProvider>
   );
 }
-Asosiy xususiyatlar tushuntirishi:
-NavLink va Active Style: Hozirgi ochilgan sahifa sarlavkasi avtomatik ravishda qizil rangda va qalin (bold) ko'rinishda belgilanadi.
+4. CSS Variables (Mavzular uchun)
+CSS
+:root[data-theme='light'] {
+  --bg-color: #ffffff;
+  --text-color: #333333;
+}
 
-useParams va Dinamik marshrut: /kurslar/:id orqali har bir kursning o'ziga xos ID raqami olinib, sahifada ko'rsatiladi.
+:root[data-theme='dark'] {
+  --bg-color: #1a1a1a;
+  --text-color: #f0f0f0;
+}
 
-useSearchParams: Qidiruv satridagi ?q=...&p=... parametrlari URL bilan to'g'ridan-to'g'ri sinxronizatsiya qilinadi.
-
-useNavigate: Login tugmasi bosilgach, foydalanuvchi dasturiy ravishda /profil sahifasiga yo'naltiriladi. navigate(-1) esa brauzerdagi Back (orqaga) vazifasini bajaradi.
-
-Browser Back/Forward: BrowserRouter barcha brauzer tarixini (history stack) avtomatik ravishda boshqaradi.
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s, color 0.3s;
+}
