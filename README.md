@@ -1,200 +1,251 @@
+# ════════════════════════════════════════════════════════════════════
+# DARS 8: Fayllar bilan ishlash
+# ════════════════════════════════════════════════════════════════════
+
 import asyncio
-import logging
 import os
-from aiogram import Bot, Dispatcher, F, html
+import logging
+from pathlib import Path
+from dotenv import load_dotenv
+
+from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     Message,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-    FSInputFile,
-    URLInputFile,
-    BufferedInputFile
+    FSInputFile, URLInputFile, BufferedInputFile,
+    InputMediaPhoto,
 )
 from aiogram.utils.media_group import MediaGroupBuilder
-from dotenv import load_dotenv
 
 load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(
+    token=os.getenv("BOT_TOKEN"),
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
 dp = Dispatcher()
 
-# Fayllarni saqlash uchun papka
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
-# 🔄 file_id kesh patterni (Takroriy yuklanishni oldini olish uchun)
-FILE_ID_CACHE = {}
 
-# Asosiy menyu
-menu_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="/photo"), KeyboardButton(text="/doc")],
-        [KeyboardButton(text="/album"), KeyboardButton(text="/voice")],
-        [KeyboardButton(text="/id"), KeyboardButton(text="/help")]
-    ],
-    resize_keyboard=True
-)
+# file_id cache (production'da DB)
+SAVED_FILE_IDS: dict[str, str] = {}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 1) Boshlash
+# ─────────────────────────────────────────────────────────────────────
 
 @dp.message(CommandStart())
-async def cmd_start(message: Message):
-    await message.answer(
-        "Salom! Media va fayllar bilan ishlovchi botga xush kelibsiz. Quyidagi buyruqlardan foydalaning:",
-        reply_markup=menu_kb
+async def cmd_start(m: Message):
+    await m.answer(
+        f"Salom, <b>{m.from_user.first_name}</b>!\n\n"
+        f"Fayllar bilan ishlash bo'lim:\n"
+        f"/photo — rasm yuborish\n"
+        f"/doc — PDF yuborish\n"
+        f"/album — 4 ta rasm albom\n"
+        f"/voice — voice xabar\n\n"
+        f"Yoki menga rasm/voice/hujjat yuboring — saqlayman."
     )
 
-@dp.message(Command("help"))
-async def cmd_help(message: Message):
-    text = (
-        "<b>Buyruqlar ro'yxati:</b>\n"
-        "• /photo - FSInputFile orqali lokal rasm yuborish\n"
-        "• /doc - URLInputFile orqali hujjat yuborish\n"
-        "• /album - MediaGroupBuilder yordamida albom yuborish\n"
-        "• /voice - BufferedInputFile orqali ovozli xabar yuborish\n\n"
-        "<i>Shuningdek, botga rasm, fayl, ovoz, stiker yoki lokatsiya yuborib sinashingiz mumkin!</i>"
-    )
-    await message.answer(text)
 
-# ==================== 4 XIL INPUT FILE VARIANTRLARI ====================
+# ─────────────────────────────────────────────────────────────────────
+# 2) Yuborish — 4 ta variant
+# ─────────────────────────────────────────────────────────────────────
 
-# 1. FSInputFile (Lokal faylni yuborish)
 @dp.message(Command("photo"))
-async def send_local_photo(message: Message):
-    # Sinov uchun vaqtinchalik rasm yaratish yoki mavjud fayl ko'rsatish
-    photo_path = os.path.join(UPLOAD_DIR, "sample.jpg")
-    
-    # Agar fayl bo'lmasa, URL'dan yuklab saqlab qo'yamiz (namuna uchun)
-    if not os.path.exists(photo_path):
-        url_file = URLInputFile("https://images.unsplash.com/photo-1579353977828-2a4eab540d9f?w=600")
-        with open(photo_path, "wb") as f:
-            f.write(await bot.download(url_file))
+async def cmd_photo(m: Message):
+    # 1) Lokal fayl (sekin — har safar upload)
+    # await m.answer_photo(FSInputFile("static/cat.jpg"))
 
-    photo = FSInputFile(photo_path)
-    await message.answer_photo(
-        photo=photo,
-        caption="<b>FSInputFile</b> orqali yuborilgan lokal rasm 🖼",
-        reply_markup=menu_kb
+    # 2) URL'dan
+    await m.answer_photo(
+        URLInputFile("https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600"),
+        caption="🐱 Mushuk (Unsplash'dan)",
     )
 
-# 2. URLInputFile (Internetdagi havoladan yuborish)
+
 @dp.message(Command("doc"))
-async def send_url_document(message: Message):
-    doc = URLInputFile("https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", filename="sample.pdf")
-    await message.answer_document(
-        document=doc,
-        caption="<b>URLInputFile</b> orqali yuborilgan hujjat 📄"
+async def cmd_doc(m: Message):
+    # Buffer'dan (yangi yaratilgan)
+    import io
+    text = "Bu — bot tomonidan yaratilgan PDF mazmuni.\n\n"
+    text += "Production'da reportlab yoki weasyprint bilan."
+    buf = io.BytesIO(text.encode())
+
+    await m.answer_document(
+        BufferedInputFile(buf.getvalue(), filename="hisobot.txt"),
+        caption="📄 Hisobot tayyor",
     )
 
-# 4. BufferedInputFile (Xotiradagi baytlardan yuborish)
-@dp.message(Command("voice"))
-async def send_buffered_voice(message: Message):
-    # Oddiy matnni baytlarga o'tkazib ovozli xabar sifatida yuborish simulyatsiyasi
-    byte_data = b"Ovozli xabar baytlari..."
-    voice = BufferedInputFile(byte_data, filename="voice.ogg")
-    await message.answer_voice(voice=voice, caption="<b>BufferedInputFile</b> orqali yuborilgan ovoz")
 
-
-# ==================== MEDIA GROUP (ALBUM) ====================
 @dp.message(Command("album"))
-async def send_media_album(message: Message):
-    album_builder = MediaGroupBuilder(
-        caption="<b>MediaGroupBuilder</b> yuborgan 4+ ta rasm albomi 📸"
-    )
-    album_builder.add(
-        type="photo",
-        media=URLInputFile("https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=600")
-    )
-    album_builder.add(
-        type="photo",
-        media=URLInputFile("https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=600")
-    )
-    album_builder.add(
-        type="photo",
-        media=URLInputFile("https://images.unsplash.com/photo-1426604966848-d7adacbd02bff?w=600")
-    )
-    album_builder.add(
-        type="photo",
-        media=URLInputFile("https://images.unsplash.com/photo-1511884642898-4c92249e20b6?w=600")
-    )
-    
-    await message.answer_media_group(media=album_builder.build())
+async def cmd_album(m: Message):
+    urls = [
+        "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600",
+        "https://images.unsplash.com/photo-1517849845537-4d257902454a?w=600",
+        "https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=600",
+        "https://images.unsplash.com/photo-1592194996308-7b43878e84a6?w=600",
+    ]
+    builder = MediaGroupBuilder(caption="📸 Mushuklar albomi")
+    for i, url in enumerate(urls):
+        builder.add_photo(URLInputFile(url))
+    await bot.send_media_group(m.chat.id, builder.build())
 
 
-# ==================== HANDLER'LAR VA FILTRLAR ====================
-
-# F.photo — Rasm qabul qilish, bot.get_file + download_file va file_id kesh
-@dp.message(F.photo)
-async def handle_photo(message: Message):
-    # Eng sifatli rasmni olish (oxirgisi)
-    photo = message.photo[-1]
-    file_id = photo.file_id
-    
-    # 🔄 file_id cache pattern tushuntirishi:
-    # Agar bu rasm oldin kelgan bo'lsa, uni serverdan qayta yuklab o'tirmaymiz,
-    # to'g'ridan-to'g'ri keshdan foydalanamiz yoki tezkor javob beramiz.
-    if file_id in FILE_ID_CACHE:
-        print(f"Keshdan olindi: {file_id}")
+@dp.message(Command("voice"))
+async def cmd_voice(m: Message):
+    # Demo — agar voice fayl bo'lsa
+    voice_path = Path("static/voice.ogg")
+    if voice_path.exists():
+        await m.answer_voice(FSInputFile(voice_path))
     else:
-        FILE_ID_CACHE[file_id] = "saved_in_memory"
-        print(f"Yangi file_id keshga qo'shildi: {file_id}")
+        await m.answer("voice.ogg topilmadi. Faqat demo.")
 
-    # Faylni telegram serveridan yuklab olish
-    file_info = await bot.get_file(file_id)
-    file_path = file_info.file_path
-    
-    destination = os.path.join(UPLOAD_DIR, f"{photo.file_unique_id}.jpg")
-    await bot.download_file(file_path, destination)
-    
-    await message.answer(
-        f"Rasm qabul qilindi va <code>uploads/</code> papkasiga saqlandi! ✅\n"
-        f"<b>file_id:</b> <code>{file_id}</code>"
+
+# ─────────────────────────────────────────────────────────────────────
+# 3) Qabul qilish — rasm
+# ─────────────────────────────────────────────────────────────────────
+
+@dp.message(F.photo)
+async def get_photo(m: Message):
+    photo = m.photo[-1]    # eng katta versiyasi
+
+    # Telegram'dan file_path
+    file = await bot.get_file(photo.file_id)
+
+    # Local'ga saqlash
+    local_path = UPLOAD_DIR / f"{m.from_user.id}_{photo.file_unique_id}.jpg"
+    await bot.download_file(file.file_path, str(local_path))
+
+    # file_id ni saqlash (qayta yuborish uchun)
+    SAVED_FILE_IDS[f"user_{m.from_user.id}_last_photo"] = photo.file_id
+
+    await m.answer(
+        f"📷 Rasm saqlandi!\n"
+        f"Eni × bo'yi: {photo.width} × {photo.height}\n"
+        f"Hajmi: {photo.file_size:,} bayt\n"
+        f"Yo'li: <code>{local_path}</code>\n"
+        f"file_id: <code>{photo.file_id[:30]}...</code>"
     )
 
-# F.document — Hajm va MIME turiga ko'ra filtr
-@dp.message(F.document & (F.document.file_size < 10 * 1024 * 1024)) # 10 MB dan kichik
-async def handle_document(message: Message):
-    doc = message.document
-    await message.answer(
-        f"Hujjat qabul qilindi 📂\n"
-        f"• Nomi: <code>{html.quote(doc.file_name)}</code>\n"
-        f"• Hajmi: {doc.file_size} bayt\n"
-        f"• MIME: {doc.mime_type}"
+
+# ─────────────────────────────────────────────────────────────────────
+# 4) Qabul qilish — hujjat
+# ─────────────────────────────────────────────────────────────────────
+
+@dp.message(F.document)
+async def get_doc(m: Message):
+    doc = m.document
+
+    # Hajm tekshirish
+    MAX_MB = 10
+    if doc.file_size > MAX_MB * 1024 * 1024:
+        await m.answer(f"❌ Fayl juda katta (max {MAX_MB} MB)")
+        return
+
+    # Mime tekshirish
+    ALLOWED = {"application/pdf", "image/png", "image/jpeg", "text/plain"}
+    if doc.mime_type not in ALLOWED:
+        await m.answer(f"❌ Bu turdagi fayl qabul qilinmaydi: {doc.mime_type}")
+        return
+
+    file = await bot.get_file(doc.file_id)
+    local_path = UPLOAD_DIR / f"{m.from_user.id}_{doc.file_name}"
+    await bot.download_file(file.file_path, str(local_path))
+
+    await m.answer(
+        f"📄 Hujjat saqlandi!\n"
+        f"Nomi: <b>{doc.file_name}</b>\n"
+        f"Tur: {doc.mime_type}\n"
+        f"Hajmi: {doc.file_size:,} bayt"
     )
 
-# F.voice — Davomiyligi cheklangan ovozli xabar (masalan, 60 sekunddan kam)
-@dp.message(F.voice & (F.voice.duration <= 60))
-async def handle_voice(message: Message):
-    await message.answer(f"Ovozli xabar qabul qilindi! 🎤 Davomiyligi: {message.voice.duration} soniya.")
 
-# F.sticker — Stikerni qaytarish (Echo stiker)
+# ─────────────────────────────────────────────────────────────────────
+# 5) Qabul qilish — voice
+# ─────────────────────────────────────────────────────────────────────
+
+@dp.message(F.voice)
+async def get_voice(m: Message):
+    voice = m.voice
+    if voice.duration > 60:
+        await m.answer("❌ Voice 60 sekunddan ko'p — qisqaroq yuboring")
+        return
+
+    file = await bot.get_file(voice.file_id)
+    local_path = UPLOAD_DIR / f"{m.from_user.id}_voice.ogg"
+    await bot.download_file(file.file_path, str(local_path))
+
+    await m.answer(
+        f"🎤 Voice saqlandi!\n"
+        f"Davomiyligi: {voice.duration}s\n"
+        f"Hajmi: {voice.file_size:,} bayt\n\n"
+        f"<i>Whisper bilan matn'ga aylantirish mumkin (bonus).</i>"
+    )
+
+    # Bonus: voice'ni qaytarib yuborish
+    await m.answer_voice(FSInputFile(local_path), caption="🔄 Sizning voice'ingiz")
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 6) PDF/PNG specific
+# ─────────────────────────────────────────────────────────────────────
+
+@dp.message(F.document.mime_type == "application/pdf")
+async def get_pdf(m: Message):
+    # PDF — alohida handler
+    doc = m.document
+    await m.answer(f"📕 PDF qabul qilindi: {doc.file_name}")
+    # Davom — yuqoridagi F.document handler ham ishlamaydi (filter aniqroq)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 7) Sticker
+# ─────────────────────────────────────────────────────────────────────
+
 @dp.message(F.sticker)
-async def handle_sticker(message: Message):
-    await message.answer_sticker(sticker=message.sticker.file_id)
+async def get_sticker(m: Message):
+    s = m.sticker
+    await m.answer(
+        f"😄 Sticker!\n"
+        f"Emoji: {s.emoji}\n"
+        f"Set: {s.set_name or '—'}\n"
+        f"Animatsiya: {'ha' if s.is_animated else 'yo\'q'}\n"
+        f"Video: {'ha' if s.is_video else 'yo\'q'}\n"
+        f"file_id: <code>{s.file_id[:30]}...</code>"
+    )
+    # Sticker'ni qaytarish
+    await m.answer_sticker(s.file_id)
 
-# F.location — Joylashuvni qabul qilib Google Maps havolasini berish
+
+# ─────────────────────────────────────────────────────────────────────
+# 8) Location
+# ─────────────────────────────────────────────────────────────────────
+
 @dp.message(F.location)
-async def handle_location(message: Message):
-    lat = message.location.latitude
-    lon = message.location.longitude
-    maps_url = f"https://maps.google.com/?q={lat},{lon}"
-    
-    await message.answer(
-        f"📍 <b>Sizning lokatsiyangiz:</b>\n"
-        f"• Kenglik (Latitude): <code>{lat}</code>\n"
-        f"• Uzunlik (Longitude): <code>{lon}</code>\n\n"
-        f"🗺 <a href='{maps_url}'>Google Maps'da ochish</a>"
+async def get_location(m: Message):
+    loc = m.location
+    await m.answer(
+        f"📍 Joylashuv:\n"
+        f"Lat: <code>{loc.latitude}</code>\n"
+        f"Lon: <code>{loc.longitude}</code>\n\n"
+        f"Google Maps: https://maps.google.com/?q={loc.latitude},{loc.longitude}"
     )
 
-# ==================== MAIN ====================
+    # Bot ham joylashuv yuboradi (Toshkent markazi)
+    await m.answer_location(latitude=41.3111, longitude=69.2797)
+
+
+# ─────────────────────────────────────────────────────────────────────
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
-    print("Media bot ishga tushdi...")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
