@@ -1,110 +1,148 @@
-1. Backend Sozlamalari (Render / Railway)
-Production muhitida backend xavfsiz va to'g'ri ishlashi uchun CORS va Environment variables quyidagicha sozlanishi shart:
-
-server.js (CORS'ni production frontend domeniga moslash)
-JavaScript
-const express = require('express');
-const cors = require('cors');
-const app = express();
-
-// Ruxsat etilgan domenlar ro'yxati (Frontend qayerga deploy qilingan bo'lsa o'sha domen yoziladi)
-const allowedOrigins = [
-  'http://localhost:3000', // Local dev uchun
-  'https://sening-frontend-domen.vercel.app' // Vercel'dagi production domeningiz
-];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    // Agar origin yo'q bo'lsa (masalan Postman yoki server-to-server so'rovlar) yoki ruxsat etilganlar ro'yxatida bo'lsa
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS siyosati bu domenga ruxsat bermaydi'));
-    }
-  },
-  credentials: true
-}));
-
-app.use(express.json());
-
-// ... qolgan endpoint'lar (register, login, tasks va h.k.)
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server ${PORT}-portda ishlamoqda`));
-Hostingda (Render/Railway) o'rnatiladigan Environment Variables:
-DATABASE_URL — PostgreSQL bazasining tashqi ulanish havolasi (External Connection String)
-
-JWT_SECRET — Maxfiy kalit (string)
-
-PORT — Render yoki Railway avtomatik beradi (odatda kiritish shart emas, lekin process.env.PORT ishlatilishi shart)
-
-2. Frontend Sozlamalari (Vercel / Netlify)
-Frontend qismida API bazaviy manzilini qattiq kodlash (hardcode) o'rniga Environment variable orqali olish kerak.
-
-API chaqiruvlarini sozlash (src/api.js yoki config.js)
-JavaScript
-// Environment variable orqali backend manzilini olish
-// Vercel uchun: REACT_APP_API_URL (React uchun) yoki VITE_API_URL (Vite uchun)
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
-export default API_URL;
-So'rov yuborishda:
-
-JavaScript
-import API_URL from './api';
-
-const response = await fetch(`${API_URL}/tasks`, {
-  headers: {
-    'Authorization': `Bearer ${token}`
-  }
-});
-Hostingda (Vercel) o'rnatiladigan Environment Variable:
-REACT_APP_API_URL (yoki Vite ishlatsangiz VITE_API_URL) = [https://sening-backend-domen.onrender.com](https://sening-backend-domen.onrender.com)
-
-3. Yakuniy README.md Shabloni
-GitHub repository'ingizning asosiy sahifasidagi README.md faylini quyidagi ko'rinishda yangilang:
-
-Markdown
-# TaskFlow — Full-Stack Task Management Application
-
-TaskFlow bu foydalanuvchilarga o'z vazifalarini xavfsiz boshqarish, qidirish va filtrlash imkonini beruvchi zamonaviy veb-ilova. Loyiha to'liq to'liq (Full-Stack) tarzda ishlab chiqildi va production muhitiga deploy qilindi.
-
-## 🚀 Jonli Havolalar (Live Demos)
-- **Frontend (Vercel):** [https://taskflow-frontend.vercel.app](https://sening-frontend-domen.vercel.app)
-- **Backend (Render):** [https://taskflow-backend.onrender.com](https://sening-backend-domen.onrender.com)
-
----
-
-## 🛠 Seksiyalar va Texnologiyalar (Tech Stack)
-* **Backend:** Node.js, Express.js, PostgreSQL, JWT (jsonwebtoken), bcrypt
-* **Frontend:** React, Redux Toolkit, CSS / UI Components
-* **Hosting:** 
-  * Backend: Render
-  * Frontend: Vercel
-  * Database: PostgreSQL (Neon / Render)
-
----
-
-## ✅ Loyiha Holat Checklist'i (6/6 Bosqich)
-- [x] **1-bosqich:** Backend arxitekturasi va PostgreSQL baza ulanishi
-- [x] **2-bosqich:** JWT autentifikatsiya, bcrypt parol xavfsizligi va himoyalangan route'lar
-- [x] **3-bosqich:** Qidiruv (`ILIKE`), filtr (`category_id`) va sahifalash (`LIMIT / OFFSET`)
-- [x] **4-bosqich:** Frontend qismi, Login/Register formalari va `localStorage` boshqaruvi
-- [x] **5-bosqich:** Redux Toolkit yordamida global holat (state) va **400ms Debounce** qidiruv tizimi
-- [x] **6-bosqich:** Production deploy (Render + Vercel), CORS to'g'ri sozlanishi va jonli havolalar integratsiyasi
-
----
-
-## ⚙️ Mahalliy ishga tushirish (Local Installation)
-
-Loyihani o'z kompyuteringizda ishga tushirish uchun:
-
-1. Repozitoriyani klonlang:
-   ```bash
-   git clone [https://github.com/username/TaskFlow.git](https://github.com/username/TaskFlow.git)
-Backend va Frontend papkalariga o'tib bog'liqliklarni o'rnating:
+🛠 1. Loyihani sozlash va ishga tushirish
+Terminalda quyidagi buyruqlarni bajarib virtual muhit yaratamiz va kutubxonalarni o'rnatamiz:
 
 Bash
-cd backend && npm install
-cd ../frontend && npm install
-.env fayllarini to'ldiring va serverlarni ishga tushiring.
+# Virtual muhit yaratish
+python -m venv venv
+
+# Virtual muhitni yoqish (Windows uchun)
+venv\Scripts\activate
+
+# Virtual muhitni yoqish (Mac/Linux uchun)
+source venv/bin/activate
+
+# Kerakli kutubxonalarni o'rnatish
+pip install aiogram python-dotenv
+📁 2. Fayllar strukturasi
+Loyiha papkasida quyidagi fayllarni hosil qiling:
+
+Plaintext
+my_telegram_bot/
+│
+├── venv/
+├── .env
+├── .gitignore
+└── bot.py
+⚙️ 3. Konfiguratsiya fayllari
+.env
+Bot Father'dan olgan maxfiy tokenni shu yerga yozasiz:
+
+Фрагмент кода
+BOT_TOKEN=123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ
+.gitignore
+Maxfiy tokenli .env fayli va virtual muhit Git'ga tushib ketmasligi uchun:
+
+Plaintext
+venv/
+.env
+__pycache__/
+💻 4. Bot kodi (bot.py)
+Quyidagi kodni bot.py fayliga yozing. Bu yerda siz so'ragan barcha handlerlar, HTML formatlash va DefaultBotProperties sozlamalari to'liq kiritilgan:
+
+Python
+import asyncio
+import logging
+import os
+from aiogram import Bot, Dispatcher, F, html
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.filters import Command, CommandStart
+from aiogram.types import Message
+from dotenv import load_dotenv
+
+# .env faylidan o'zgaruvchilarni o'qish
+load_dotenv()
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# Logging'ni sozlash
+logging.basicConfig(level=logging.INFO)
+
+# Bot va Dispatcher obyektlarini yaratish
+# ParseMode.HTML ni default tarzda o'rnatish
+bot = Bot(
+    token=BOT_TOKEN, 
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+dp = Dispatcher()
+
+
+# /start handler'i
+@dp.message(CommandStart())
+async def cmd_start(message: Message):
+    user_name = html.quote(message.from_user.first_name)
+    text = (
+        f"Salom, <b>{user_name}</b>! 👋\n\n"
+        f"Men <i>aiogram 3.x</i> yordamida yaratilgan botman.\n"
+        f"Mening imkoniyatlarimni ko'rish uchun /help buyrug'ini bosing."
+    )
+    await message.answer(text)
+
+
+# /help handler'i
+@dp.message(Command("help"))
+async def cmd_help(message: Message):
+    text = (
+        "<b>Mavjud buyruqlar:</b>\n"
+        "• /start - Botni ishga tushirish\n"
+        "• /help - Yordam olish\n"
+        "• /info - Bot haqida ma'lumot\n"
+        "• /id - Sizning Telegram ID'ingiz\n\n"
+        "<i>Har qanday xabar yuborsangiz, uni Echo qilaman!</i>"
+    )
+    await message.answer(text)
+
+
+# /info handler'i (Bot.get_me() ishlatilgan)
+@dp.message(Command("info"))
+async def cmd_info(message: Message):
+    bot_info = await bot.get_me()
+    text = (
+        "🤖 <b>Bot Ma'lumotlari:</b>\n"
+        f"• Nomi: <code>{html.quote(bot_info.full_name)}</code>\n"
+        f"• Username: @{bot_info.username}\n"
+        f"• ID: <code>{bot_info.id}</code>"
+    )
+    await message.answer(text)
+
+
+# /id handler'i
+@dp.message(Command("id"))
+async def cmd_id(message: Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    text = (
+        f"👤 Sizning ID: <code>{user_id}</code>\n"
+        f"💬 Chat ID: <code>{chat_id}</code>"
+    )
+    await message.answer(text)
+
+
+# Echo handler (Boshqa barcha matnli xabarlar uchun)
+@dp.message(F.text)
+async def echo_handler(message: Message):
+    try:
+        # Foydalanuvchi yuborgan matnni qaytarish
+        await message.send_copy(chat=message.chat.id)
+    except TypeError:
+        await message.answer("Faqat matnli xabarlarni qaytara olaman!")
+
+
+# Asosiy funksiya
+async def main():
+    # Bot ishga tushganda eski update'larni o'tkazib yuborish
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    bot_info = await bot.get_me()
+    print(f"@{bot_info.username} muvaffaqiyatli ishga tushdi!")
+    
+    # Polling'ni boshlash
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+🚀 5. Botni ishga tushirish
+Terminalda quyidagi buyruqni yozing:
+
+Bash
+python bot.py
