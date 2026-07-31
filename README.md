@@ -1,251 +1,347 @@
-# ════════════════════════════════════════════════════════════════════
-# DARS 8: Fayllar bilan ishlash
-# ════════════════════════════════════════════════════════════════════
+📁 Loyiha strukturasi
+Plaintext
+my-shop/
+├── src/
+│   ├── app/
+│   │   ├── hooks.ts
+│   │   └── store.ts
+│   ├── features/
+│   │   ├── api/
+│   │   │   └── productsApi.ts
+│   │   └── cart/
+│   │       └── cartSlice.ts
+│   ├── components/
+│   │   ├── ProductList.tsx
+│   │   └── Cart.tsx
+│   ├── App.tsx
+│   ├── main.tsx
+│   └── vite-env.d.ts
+├── src/__tests__/
+│   └── shop.test.tsx
+├── package.json
+├── tsconfig.json
+└── README.md
+🛠 1. Redux va RTK Query sozlamalari
+src/features/api/productsApi.ts
+TypeScript
+import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
-import asyncio
-import os
-import logging
-from pathlib import Path
-from dotenv import load_dotenv
+// Generic/Utility type namunasi: Pick yordamida Product turidan kerakli qismini olish yoki moslash
+export interface Product {
+  id: number;
+  title: string;
+  price: number;
+  description: string;
+  category: string;
+  image: string;
+}
 
-from aiogram import Bot, Dispatcher, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.filters import Command, CommandStart
-from aiogram.types import (
-    Message,
-    FSInputFile, URLInputFile, BufferedInputFile,
-    InputMediaPhoto,
-)
-from aiogram.utils.media_group import MediaGroupBuilder
+export type ProductSummary = Pick<Product, 'id' | 'title' | 'price'>;
 
-load_dotenv()
-logging.basicConfig(level=logging.INFO)
+export const productsApi = createApi({
+  reducerPath: 'productsApi',
+  baseQuery: fetchBaseQuery({ baseUrl: 'https://fakestoreapi.com' }),
+  endpoints: (builder) => ({
+    getProducts: builder.query<Product[], void>({
+      query: () => '/products',
+    }),
+  }),
+});
 
-bot = Bot(
-    token=os.getenv("BOT_TOKEN"),
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-)
-dp = Dispatcher()
+export const { useGetProductsQuery } = productsApi;
+src/features/cart/cartSlice.ts
+TypeScript
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { Product } from '../api/productsApi';
 
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+export interface CartItem {
+  product: Product;
+  quantity: number;
+}
 
+interface CartState {
+  items: CartItem[];
+}
 
-# file_id cache (production'da DB)
-SAVED_FILE_IDS: dict[str, str] = {}
+const initialState: CartState = {
+  items: [],
+};
 
+export const cartSlice = createSlice({
+  name: 'cart',
+  initialState,
+  reducers: {
+    addToCart: (state, action: PayloadAction<Product>) => {
+      const existingItem = state.items.find(
+        (item) => item.product.id === action.payload.id
+      );
+      if (existingItem) {
+        existingItem.quantity += 1;
+      } else {
+        state.items.push({ product: action.payload, quantity: 1 });
+      }
+    },
+    removeFromCart: (state, action: PayloadAction<number>) => {
+      state.items = state.items.filter(
+        (item) => item.product.id !== action.payload
+      );
+    },
+    updateQuantity: (
+      state,
+      action: PayloadAction<{ id: number; quantity: number }>
+    ) => {
+      const item = state.items.find(
+        (i) => i.product.id === action.payload.id
+      );
+      if (item) {
+        if (action.payload.quantity <= 0) {
+          state.items = state.items.filter(
+            (i) => i.product.id !== action.payload.id
+          );
+        } else {
+          item.quantity = action.payload.quantity;
+        }
+      }
+    },
+  },
+});
 
-# ─────────────────────────────────────────────────────────────────────
-# 1) Boshlash
-# ─────────────────────────────────────────────────────────────────────
+export const { addToCart, removeFromCart, updateQuantity } = cartSlice.actions;
+export default cartSlice.reducer;
+src/app/store.ts
+TypeScript
+import { configureStore } from '@reduxjs/toolkit';
+import { productsApi } from '../features/api/productsApi';
+import cartReducer from '../features/cart/cartSlice';
 
-@dp.message(CommandStart())
-async def cmd_start(m: Message):
-    await m.answer(
-        f"Salom, <b>{m.from_user.first_name}</b>!\n\n"
-        f"Fayllar bilan ishlash bo'lim:\n"
-        f"/photo — rasm yuborish\n"
-        f"/doc — PDF yuborish\n"
-        f"/album — 4 ta rasm albom\n"
-        f"/voice — voice xabar\n\n"
-        f"Yoki menga rasm/voice/hujjat yuboring — saqlayman."
-    )
+export const store = configureStore({
+  reducer: {
+    [productsApi.reducerPath]: productsApi.reducer,
+    cart: cartReducer,
+  },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware().concat(productsApi.middleware),
+});
 
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
+src/app/hooks.ts
+TypeScript
+import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
+import type { RootState, AppDispatch } from './store';
 
-# ─────────────────────────────────────────────────────────────────────
-# 2) Yuborish — 4 ta variant
-# ─────────────────────────────────────────────────────────────────────
+export const useAppDispatch = () => useDispatch<AppDispatch>();
+export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
+🎨 2. Komponentlar
+src/components/ProductList.tsx
+TypeScript
+import React from 'react';
+import { useGetProductsQuery } from '../features/api/productsApi';
+import { useAppDispatch } from '../app/hooks';
+import { addToCart } from '../features/cart/cartSlice';
 
-@dp.message(Command("photo"))
-async def cmd_photo(m: Message):
-    # 1) Lokal fayl (sekin — har safar upload)
-    # await m.answer_photo(FSInputFile("static/cat.jpg"))
+export const ProductList: React.FC = () => {
+  const { data: products, isLoading, error } = useGetProductsQuery();
+  const dispatch = useAppDispatch();
 
-    # 2) URL'dan
-    await m.answer_photo(
-        URLInputFile("https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600"),
-        caption="🐱 Mushuk (Unsplash'dan)",
-    )
+  if (isLoading) return <div>Yuklanmoqda...</div>;
+  if (error) return <div>Xatolik yuz berdi!</div>;
 
+  return (
+    <div>
+      <h2>Mahsulotlar</h2>
+      <div className="product-grid">
+        {products?.map((product) => (
+          <div key={product.id} data-testid="product-item">
+            <h3>{product.title}</h3>
+            <p>${product.price}</p>
+            <button onClick={() => dispatch(addToCart(product))}>
+              Savatga qo'shish
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+src/components/Cart.tsx
+TypeScript
+import React from 'react';
+import { useAppSelector, useAppDispatch } from '../app/hooks';
+import { removeFromCart, updateQuantity } from '../features/cart/cartSlice';
 
-@dp.message(Command("doc"))
-async def cmd_doc(m: Message):
-    # Buffer'dan (yangi yaratilgan)
-    import io
-    text = "Bu — bot tomonidan yaratilgan PDF mazmuni.\n\n"
-    text += "Production'da reportlab yoki weasyprint bilan."
-    buf = io.BytesIO(text.encode())
+export const Cart: React.FC = () => {
+  const cartItems = useAppSelector((state) => state.cart.items);
+  const dispatch = useAppDispatch();
 
-    await m.answer_document(
-        BufferedInputFile(buf.getvalue(), filename="hisobot.txt"),
-        caption="📄 Hisobot tayyor",
-    )
+  const totalSum = cartItems.reduce(
+    (sum, item) => sum + item.product.price * item.quantity,
+    0
+  );
 
+  return (
+    <div>
+      <h2>Savat</h2>
+      {cartItems.length === 0 ? (
+        <p>Savat bo'sh</p>
+      ) : (
+        <div>
+          {cartItems.map((item) => (
+            <div key={item.product.id} data-testid="cart-item">
+              <span>{item.product.title}</span>
+              <span>${item.product.price}</span>
+              <input
+                type="number"
+                value={item.quantity}
+                onChange={(e) =>
+                  dispatch(
+                    updateQuantity({
+                      id: item.product.id,
+                      quantity: Number(e.target.value),
+                    })
+                  )
+                }
+              />
+              <button onClick={() => dispatch(removeFromCart(item.product.id))}>
+                O'chirish
+              </button>
+            </div>
+          ))}
+          <h3 data-testid="total-sum">Jami: ${totalSum.toFixed(2)}</h3>
+        </div>
+      )}
+    </div>
+  );
+};
+🧪 3. Testlar (Vitest + React Testing Library)
+src/__tests__/shop.test.tsx
+TypeScript
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Provider } from 'react-redux';
+import { configureStore } from '@reduxjs/toolkit';
+import { setupServer } from 'msw/node';
+import { http, HttpResponse } from 'msw';
+import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
 
-@dp.message(Command("album"))
-async def cmd_album(m: Message):
-    urls = [
-        "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600",
-        "https://images.unsplash.com/photo-1517849845537-4d257902454a?w=600",
-        "https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=600",
-        "https://images.unsplash.com/photo-1592194996308-7b43878e84a6?w=600",
-    ]
-    builder = MediaGroupBuilder(caption="📸 Mushuklar albomi")
-    for i, url in enumerate(urls):
-        builder.add_photo(URLInputFile(url))
-    await bot.send_media_group(m.chat.id, builder.build())
+import cartReducer from '../features/cart/cartSlice';
+import { productsApi } from '../features/api/productsApi';
+import { ProductList } from '../components/ProductList';
+import { Cart } from '../components/Cart';
 
+// MSW Serverni Sozlash
+const server = setupServer(
+  http.get('https://fakestoreapi.com/products', () => {
+    return HttpResponse.json([
+      { id: 1, title: 'Test Product 1', price: 100, description: 'Desc', category: 'cat', image: 'img' },
+      { id: 2, title: 'Test Product 2', price: 200, description: 'Desc', category: 'cat', image: 'img' },
+    ]);
+  })
+);
 
-@dp.message(Command("voice"))
-async def cmd_voice(m: Message):
-    # Demo — agar voice fayl bo'lsa
-    voice_path = Path("static/voice.ogg")
-    if voice_path.exists():
-        await m.answer_voice(FSInputFile(voice_path))
-    else:
-        await m.answer("voice.ogg topilmadi. Faqat demo.")
+beforeAll(() => server.listen());
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
+const renderWithStore = (component: React.ReactElement) => {
+  const store = configureStore({
+    reducer: {
+      [productsApi.reducerPath]: productsApi.reducer,
+      cart: cartReducer,
+    },
+    middleware: (getDefaultMiddleware) =>
+      getDefaultMiddleware().concat(productsApi.middleware),
+  });
+  return { ...render(<Provider store={store}>{component}</Provider>) };
+};
 
-# ─────────────────────────────────────────────────────────────────────
-# 3) Qabul qilish — rasm
-# ─────────────────────────────────────────────────────────────────────
+describe('Shop App Tests', () => {
+  // 1. Komponent render bo'lishini tekshiruvchi test
+  it('ProductList renders correctly with loading state initially', () => {
+    renderWithStore(<ProductList />);
+    expect(screen.getByText(/yuklanmoqda.../i)).toBeDefined();
+  });
 
-@dp.message(F.photo)
-async def get_photo(m: Message):
-    photo = m.photo[-1]    # eng katta versiyasi
+  // 2. Mock qilingan fetch bilan async yuklashni tekshiruvchi test (findBy)
+  it('loads and displays products asynchronously', async () => {
+    renderWithStore(<ProductList />);
+    const productTitle = await screen.findByText('Test Product 1');
+    expect(productTitle).toBeDefined();
+  });
 
-    # Telegram'dan file_path
-    file = await bot.get_file(photo.file_id)
+  // 3. userEvent bilan "savatga qo'shish" tugmasini bosish testi
+  it('adds product to cart when button is clicked', async () => {
+    renderWithStore(
+      <div>
+        <ProductList />
+        <Cart />
+      </div>
+    );
 
-    # Local'ga saqlash
-    local_path = UPLOAD_DIR / f"{m.from_user.id}_{photo.file_unique_id}.jpg"
-    await bot.download_file(file.file_path, str(local_path))
+    const addToCartButtons = await screen.findAllByText("Savatga qo'shish");
+    await userEvent.click(addToCartButtons[0]);
 
-    # file_id ni saqlash (qayta yuborish uchun)
-    SAVED_FILE_IDS[f"user_{m.from_user.id}_last_photo"] = photo.file_id
+    const cartItem = screen.getByTestId('cart-item');
+    expect(cartItem).toBeDefined();
+    expect(screen.getByText('Test Product 1')).toBeDefined();
+  });
 
-    await m.answer(
-        f"📷 Rasm saqlandi!\n"
-        f"Eni × bo'yi: {photo.width} × {photo.height}\n"
-        f"Hajmi: {photo.file_size:,} bayt\n"
-        f"Yo'li: <code>{local_path}</code>\n"
-        f"file_id: <code>{photo.file_id[:30]}...</code>"
-    )
+  // 4. Savat jami summasi to'g'ri hisoblanishini tekshiruvchi test
+  it('calculates the total sum of the cart correctly', async () => {
+    renderWithStore(
+      <div>
+        <ProductList />
+        <Cart />
+      </div>
+    );
 
+    const addToCartButtons = await screen.findAllByText("Savatga qo'shish");
+    await userEvent.click(addToCartButtons[0]); // 100
+    await userEvent.click(addToCartButtons[1]); // 200
 
-# ─────────────────────────────────────────────────────────────────────
-# 4) Qabul qilish — hujjat
-# ─────────────────────────────────────────────────────────────────────
+    const totalSumElement = screen.getByTestId('total-sum');
+    expect(totalSumElement.textContent).toContain('300');
+  });
 
-@dp.message(F.document)
-async def get_doc(m: Message):
-    doc = m.document
+  // 5. Xato holatini tekshiruvchi test (server 500 qaytarsa)
+  it('handles server error (500) gracefully', async () => {
+    server.use(
+      http.get('https://fakestoreapi.com/products', () => {
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
 
-    # Hajm tekshirish
-    MAX_MB = 10
-    if doc.file_size > MAX_MB * 1024 * 1024:
-        await m.answer(f"❌ Fayl juda katta (max {MAX_MB} MB)")
-        return
+    renderWithStore(<ProductList />);
+    const errorMessage = await screen.findByText(/xatolik yuz berdi!/i);
+    expect(errorMessage).toBeDefined();
+  });
+});
+📖 4. README.md
+Markdown
+# React + TypeScript E-Commerce Loyihasi
 
-    # Mime tekshirish
-    ALLOWED = {"application/pdf", "image/png", "image/jpeg", "text/plain"}
-    if doc.mime_type not in ALLOWED:
-        await m.answer(f"❌ Bu turdagi fayl qabul qilinmaydi: {doc.mime_type}")
-        return
+Ushbu loyiha React, TypeScript, Redux Toolkit (RTK Query) va Vitest texnologiyalari yordamida qurilgan bo'lib, to'liq tiplangan va test qilingan savat hamda mahsulotlar ro'yxati funksionalligini o'z ichiga oladi.
 
-    file = await bot.get_file(doc.file_id)
-    local_path = UPLOAD_DIR / f"{m.from_user.id}_{doc.file_name}"
-    await bot.download_file(file.file_path, str(local_path))
+## 🛠 Texnologiyalar
+- **React** (.tsx)
+- **TypeScript**
+- **Redux Toolkit & RTK Query**
+- **Vitest & React Testing Library** (MSW bilan birga)
 
-    await m.answer(
-        f"📄 Hujjat saqlandi!\n"
-        f"Nomi: <b>{doc.file_name}</b>\n"
-        f"Tur: {doc.mime_type}\n"
-        f"Hajmi: {doc.file_size:,} bayt"
-    )
+---
 
+## 🚀 Loyihani ishga tushirish
 
-# ─────────────────────────────────────────────────────────────────────
-# 5) Qabul qilish — voice
-# ─────────────────────────────────────────────────────────────────────
+1. **Bog'liqliklarni o'rnatish:**
+   ```bash
+   npm install
+Loyihani lokal serverda ishga tushirish:
 
-@dp.message(F.voice)
-async def get_voice(m: Message):
-    voice = m.voice
-    if voice.duration > 60:
-        await m.answer("❌ Voice 60 sekunddan ko'p — qisqaroq yuboring")
-        return
+Bash
+npm run dev
+🧪 Testlarni ishga tushirish
+Barcha yozilgan 5 ta testni (render, async yuklash, userEvent, jami summa va 500 server xatosi) ishga tushirish uchun:
 
-    file = await bot.get_file(voice.file_id)
-    local_path = UPLOAD_DIR / f"{m.from_user.id}_voice.ogg"
-    await bot.download_file(file.file_path, str(local_path))
-
-    await m.answer(
-        f"🎤 Voice saqlandi!\n"
-        f"Davomiyligi: {voice.duration}s\n"
-        f"Hajmi: {voice.file_size:,} bayt\n\n"
-        f"<i>Whisper bilan matn'ga aylantirish mumkin (bonus).</i>"
-    )
-
-    # Bonus: voice'ni qaytarib yuborish
-    await m.answer_voice(FSInputFile(local_path), caption="🔄 Sizning voice'ingiz")
-
-
-# ─────────────────────────────────────────────────────────────────────
-# 6) PDF/PNG specific
-# ─────────────────────────────────────────────────────────────────────
-
-@dp.message(F.document.mime_type == "application/pdf")
-async def get_pdf(m: Message):
-    # PDF — alohida handler
-    doc = m.document
-    await m.answer(f"📕 PDF qabul qilindi: {doc.file_name}")
-    # Davom — yuqoridagi F.document handler ham ishlamaydi (filter aniqroq)
-
-
-# ─────────────────────────────────────────────────────────────────────
-# 7) Sticker
-# ─────────────────────────────────────────────────────────────────────
-
-@dp.message(F.sticker)
-async def get_sticker(m: Message):
-    s = m.sticker
-    await m.answer(
-        f"😄 Sticker!\n"
-        f"Emoji: {s.emoji}\n"
-        f"Set: {s.set_name or '—'}\n"
-        f"Animatsiya: {'ha' if s.is_animated else 'yo\'q'}\n"
-        f"Video: {'ha' if s.is_video else 'yo\'q'}\n"
-        f"file_id: <code>{s.file_id[:30]}...</code>"
-    )
-    # Sticker'ni qaytarish
-    await m.answer_sticker(s.file_id)
-
-
-# ─────────────────────────────────────────────────────────────────────
-# 8) Location
-# ─────────────────────────────────────────────────────────────────────
-
-@dp.message(F.location)
-async def get_location(m: Message):
-    loc = m.location
-    await m.answer(
-        f"📍 Joylashuv:\n"
-        f"Lat: <code>{loc.latitude}</code>\n"
-        f"Lon: <code>{loc.longitude}</code>\n\n"
-        f"Google Maps: https://maps.google.com/?q={loc.latitude},{loc.longitude}"
-    )
-
-    # Bot ham joylashuv yuboradi (Toshkent markazi)
-    await m.answer_location(latitude=41.3111, longitude=69.2797)
-
-
-# ─────────────────────────────────────────────────────────────────────
-async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+Bash
+npm run test
