@@ -1,269 +1,181 @@
-Mana siz so'ragan talablar asosida to'liq, mukammal va professional darajada loyihalashtirilgan Telegram E-commerce / Delivery Bot arxitekturasi va uning asosiy qismlari uchun kodlar to'plami.
+Mana siz talab qilgan barcha shartlarni to'liq bajaruvchi, xavfsiz (parametrlashtirilgan SQL so'rovlar) va mukammal arxitekturadagi Node.js + Express + PostgreSQL (pg) loyihasi kodi:
 
-📁 1. Toza Loyiha Strukturasi (Project Structure)
-Loyihani kengaytirish qulay bo'lishi uchun src/ papkasi ostida quyidagi arxitekturadan foydalanamiz:
+1. schema.sql — Ma'lumotlar bazasi strukturasi
+Bog'liqliklar (Foreign Keys) va xavfsizlik qoidalariga to'liq amal qilingan holda (ON DELETE RESTRICT yordamida bog'liq vazifalari bor kategoriyani o'chirishning oldi olingan):
 
-Plaintext
-ecommerce_bot/
-├── .env.example
-├── .gitignore
-├── Dockerfile
-├── docker-compose.yml
-├── pyproject.toml
-├── README.md
-├── alembic.ini
-├── alembic/
-│   ├── env.py
-│   └── versions/
-├── src/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── main.py
-│   ├── database/
-│   │   ├── base.py
-│   │   └── session.py
-│   ├── models/
-│   │   ├── user.py
-│   │   ├── product.py
-│   │   ├── order.py
-│   │   └── ...
-│   ├── repositories/
-│   │   ├── user_repo.py
-│   │   └── product_repo.py
-│   ├── services/
-│   │   ├── order_service.py
-│   │   └── payment_service.py
-│   ├── handlers/
-│   │   ├── user/
-│   │   │   ├── catalog.py
-│   │   │   ├── cart.py
-│   │   │   └── checkout.py
-│   │   ├── admin/
-│   │   │   ├── products.py
-│   │   │   └── broadcast.py
-│   │   └── courier/
-│   │       └── delivery.py
-│   ├── middlewares/
-│   │   ├── i18n.py
-│   │   └── db.py
-│   └── utils/
-│       ├── states.py
-│       └── logger.py
-└── tests/
-    ├── test_user.py
-    └── test_order.py
-🗄️ 2. SQLAlchemy Async Modellar & 8+ DB Jadvallar
-Asosiy jadvallar: Users, Categories, Products, Carts, CartItems, Orders, OrderItems, Couriers, Reviews, Loyalty.
+SQL
+-- users jadvali
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-Python
-# src/models/base_model.py
-from datetime import datetime
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import DateTime
+-- categories jadvali
+CREATE TABLE IF NOT EXISTS categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-class Base(DeclarativeBase):
-    pass
+-- tasks jadvali
+CREATE TABLE IF NOT EXISTS tasks (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    completed BOOLEAN DEFAULT FALSE,
+    category_id INT NOT NULL,
+    user_id INT NOT NULL,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+2. db.js — PostgreSQL ulanish moduli (pg)
+JavaScript
+const { Pool } = require('pg');
 
-class TimestampMixin:
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-Python
-# src/models/user.py
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, BigInteger, Enum as SQLEnum
-import enum
-from .base_model import Base, TimestampMixin
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/todo_db',
+});
 
-class UserRole(str, enum.Enum):
-    USER = "user"
-    ADMIN = "admin"
-    COURIER = "courier"
+module.exports = {
+  query: (text, params) => pool.query(text, params),
+};
+3. server.js — Express API va barcha Endpoints
+Barcha talab qilingan API yo'llari (GET /tasks, POST /tasks, PUT /tasks/:id, DELETE /categories/:id) SQL injection'dan himoyalangan holda ($1, $2 orqali) yozilgan:
 
-class User(Base, TimestampMixin):
-    __tablename__ = "users"
+JavaScript
+const express = require('express');
+const db = require('./db');
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
-    full_name: Mapped[str] = mapped_column(String(100))
-    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    language: Mapped[str] = mapped_column(String(5), default="uz")
-    role: Mapped[UserRole] = mapped_column(SQLEnum(UserRole), default=UserRole.USER)
+const app = express();
+app.use(express.json());
 
-    orders = relationship("Order", back_populates="user")
-🔄 3. Service / Repository Pattern
-Ma'lumotlar bazasi va biznes logikasini bir-biridan ajratish uchun Repository va Service qatlamlari:
+// 1. GET /tasks — JOIN orqali category_nomi bilan birga qaytaradi
+app.get('/tasks', async (req, res) => {
+  try {
+    const query = `
+      SELECT t.id, t.title, t.completed, t.category_id, c.name AS category_name, t.created_at
+      FROM tasks t
+      JOIN categories c ON t.category_id = c.id
+      ORDER BY t.id DESC;
+    `;
+    const { rows } = await db.query(query);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
+  }
+});
 
-Python
-# src/repositories/user_repo.py
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from src.models.user import User
+// 2. POST /tasks — sarlavha va category_id validatsiya qilinadi, 201 qaytaradi
+app.post('/tasks', async (req, res) => {
+  const { title, category_id, user_id } = req.body;
 
-class UserRepository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+  // Validatsiya
+  if (!title || typeof title !== 'string' || title.trim() === '') {
+    return res.status(400).json({ error: "Sarlavha (title) kiritilishi shart va yaroqli bo'lishi kerak" });
+  }
+  if (!category_id || typeof category_id !== 'number') {
+    return res.status(400).json({ error: "Yaroqli category_id kiritilishi shart" });
+  }
 
-    async def get_by_telegram_id(self, telegram_id: int) -> User | None:
-        result = await self.session.execute(select(User).where(User.telegram_id == telegram_id))
-        return result.scalar_one_or_none()
+  try {
+    // Kategoriya mavjudligini tekshirish
+    const catCheck = await db.query('SELECT id FROM categories WHERE id = $1', [category_id]);
+    if (catCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Ko'rsatilgan kategoriya topilmadi" });
+    }
 
-    async def create_user(self, telegram_id: int, full_name: str, language: str = "uz") -> User:
-        user = User(telegram_id=telegram_id, full_name=full_name, language=language)
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
-🛒 4. Checkout FSM & Cart (Savatcha)
-Foydalanuvchi buyurtma berish jarayoni FSM (Finite State Machine) orqali boshqariladi:
+    const query = `
+      INSERT INTO tasks (title, category_id, user_id) 
+      VALUES ($1, $2, $3) 
+      RETURNING *;
+    `;
+    // Parametrlashtirilgan so'rov ($1, $2, $3)
+    const values = [title.trim(), category_id, user_id || 1]; 
+    const { rows } = await db.query(query, values);
 
-Python
-# src/utils/states.py
-from aiogram.fsm.state import State, StatesGroup
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
+  }
+});
 
-class CheckoutState(StatesGroup):
-    waiting_for_phone = State()
-    waiting_for_location = State()
-    waiting_for_comment = State()
-    waiting_for_confirmation = State()
-Python
-# src/handlers/user/checkout.py
-from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.fsm.context import FSMContext
-from src.utils.states import CheckoutState
+// 3. PUT /tasks/:id — bajarilgan holatini yangilaydi
+app.put('/tasks/:id', async (req, res) => {
+  const { id } = req.params;
+  const { completed } = req.body;
 
-router = Router()
+  if (typeof completed !== 'boolean') {
+    return res.status(400).json({ error: "completed qiymati boolean (true/false) bo'lishi kerak" });
+  }
 
-@router.message(F.text == "🛍 Buyurtma berish")
-async def start_checkout(message: Message, state: FSMContext):
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📱 Telefon raqamni yuborish", request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-    await message.answer("Buyurtmani rasmiylashtirish uchun telefon raqamingizni yuboring:", reply_markup=keyboard)
-    await state.set_state(CheckoutState.waiting_for_phone)
+  try {
+    const query = `
+      UPDATE tasks 
+      SET completed = $1 
+      WHERE id = $2 
+      RETURNING *;
+    `;
+    const { rows } = await db.query(query, [completed, id]);
 
-@router.message(CheckoutState.waiting_for_phone, F.contact)
-async def process_phone(message: Message, state: FSMContext):
-    phone = message.contact.phone_number
-    await state.update_data(phone=phone)
-    
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📍 Lokatsiyani yuborish", request_location=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-    await message.answer("Endi yetkazib berish manzilini (lokatsiya) yuboring:", reply_markup=keyboard)
-    await state.set_state(CheckoutState.waiting_for_location)
-🚴 5. Kuryer Moduli & Yandex Maps
-Kuryer yangi buyurtmani qabul qilib, mijoz manziliga yo'naltirilishi:
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Vazifa topilmadi" });
+    }
 
-Python
-# src/handlers/curier/delivery.py
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
+  }
+});
 
-router = Router()
+// 4. DELETE /categories/:id — bog'liq tasks bo'lsa 400 xato qaytaradi, bo'lmasa o'chiradi
+app.delete('/categories/:id', async (req, res) => {
+  const { id } = req.params;
 
-@router.callback_query(F.data.startswith("accept_order:"))
-async def courier_accept_order(call: CallbackQuery):
-    order_id = int(call.data.split(":")[1])
-    # Statusni "yetkazilmoqda" ga o'zgartirish logikasi
-    
-    lat, lon = 41.311081, 69.240562 # Misol uchun mijoz koordinatalari
-    yandex_maps_url = f"https://yandex.com/maps/?rtext=~{lat},{lon}"
-    
-    await call.message.answer(
-        f"Siz #{order_id}-sonli buyurtmani qabul qildingiz!\n\n"
-        f"Mijoz manziliga yo'l olish uchun Yandex Maps'dan foydalaning:\n"
-        f"[Yo'nalishni ochish]({yandex_maps_url})",
-        parse_mode="Markdown"
-    )
-    await call.answer()
-🐳 6. Docker & Production Muhiti
-docker-compose.yml fayli orqali PostgreSQL, Redis va Bot konteynerlarini birgalikda ishga tushirish:
+  try {
+    // Ushbu kategoriyaga bog'liq vazifalar borligini tekshiramiz
+    const checkQuery = 'SELECT COUNT(*) FROM tasks WHERE category_id = $1';
+    const checkResult = await db.query(checkQuery, [id]);
+    const taskCount = parseInt(checkResult.rows[0].count, 10);
 
-YAML
-version: '3.8'
+    if (taskCount > 0) {
+      return res.status(400).json({ 
+        error: "Ushbu kategoriyaga bog'liq vazifalar mavjud. Avval ularni o'chiring yoki boshqa kategoriyaga o'tkazing." 
+      });
+    }
 
-services:
-  db:
-    image: postgres:15-alpine
-    container_name: postgres_db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: ecommerce_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+    // Bog'liq vazifalar bo'lmasa, kategoriyani o'chiramiz
+    const deleteQuery = 'DELETE FROM categories WHERE id = $1 RETURNING *;';
+    const { rows } = await db.query(deleteQuery, [id]);
 
-  redis:
-    image: redis:alpine
-    container_name: redis_cache
-    ports:
-      - "6379:6379"
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Kategoriya topilmadi" });
+    }
 
-  bot:
-    build: .
-    container_name: aiogram_bot
-    command: python src/main.py
-    volumes:
-      - .:/app
-    environment:
-      - BOT_TOKEN=your_bot_token_here
-      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/ecommerce_db
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      - db
-      - redis
+    res.json({ message: "Kategoriya muvaffaqiyatli o'chirildi", deleted: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
+  }
+});
 
-volumes:
-  pgdata:
-🧪 7. Pytest Unit Testlar
-Biznes logika va ma'lumotlar bazasi amallari uchun testlar:
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server ${PORT}-portda ishga tushdi...`);
+});
+4. README.md — Holat Checklist'i
+Markdown
+# Node.js Express & PostgreSQL Todo API
 
-Python
-# tests/test_user.py
-import pytest
-from src.repositories.user_repo import UserRepository
+## 📋 Holat Checklist'i (Status Checklist)
 
-@pytest.mark.asyncio
-async def test_create_user(async_session):
-    repo = UserRepository(async_session)
-    user = await repo.create_user(telegram_id=123456789, full_name="Test User", language="uz")
-    
-    assert user.telegram_id == 123456789
-    assert user.full_name == "Test User"
-    assert user.language == "uz"
-🚀 8. Asosiy Ishga Tushirish Fayli (main.py)
-Python
-# src/main.py
-import asyncio
-import logging
-from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.redis import RedisStorage
-from src.config import settings
-from src.handlers.user import checkout, catalog
-from src.handlers.admin import products, broadcast
-from src.handlers.curier import delivery
-
-async def main():
-    logging.basicConfig(level=logging.INFO)
-    
-    storage = RedisStorage.from_url(settings.REDIS_URL)
-    bot = Bot(token=settings.BOT_TOKEN)
-    dp = Dispatcher(storage=storage)
-
-    # Routerni ulash
-    dp.include_router(checkout.router)
-    dp.include_router(catalog.router)
-    dp.include_router(delivery.router)
-
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+- [x] **schema.sql**: `users`, `categories`, `tasks` jadvallari to'g'ri Foreign Key bog'liqliklari bilan yaratildi.
+- [x] **GET /tasks**: Ma'lumotlar `JOIN` yordamida `category_nomi` bilan birgalikda qaytarilmoqda.
+- [x] **POST /tasks**: `title` va `category_id` validatsiyadan o'tkazilib, muvaffaqiyatli qo'shilganda `201 Created` statusi qaytarilmoqda.
+- [x] **PUT /tasks/:id**: Vazifaning bajarilganlik holati (`completed`) xavfsiz yangilanmoqda.
+- [x] **DELETE /categories/:id**: Bog'liq vazifalari bor kategoriya o'chirilganda `400 Bad Request` xatosi qaytarilmoqda, bog'liqlik bo'lmasa o'chirilmoqda.
+- [x] **Xavfsizlik**: Barcha SQL so'rovlar SQL Injection'dan himoyalangan holda parametrlashtirilgan (`$1, $2, ...`).
+- [x] **Dokumentatsiya**: README.md faylidagi holat checklist'i yangilandi.
