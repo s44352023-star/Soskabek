@@ -1,172 +1,140 @@
-💻 Kod (HTML + CSS)
-HTML
-<!DOCTYPE html>
-<html lang="uz">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSS orqali Dark/Light Tema Almashtirish</title>
-    <style>
-        /* 1. :root da barcha ranglar va o'lchamlar CSS o'zgaruvchi sifatida */
-        :root {
-            --bg-color: #f4f6f9;
-            --card-bg: #ffffff;
-            --text-color: #333333;
-            --text-muted: #666666;
-            --primary-color: #3b82f6;
-            --primary-hover: #2563eb;
-            --border-color: #e2e8f0;
-            --shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-            
-            --spacing-sm: 8px;
-            --spacing-md: 16px;
-            --spacing-lg: 24px;
-            --border-radius: 12px;
-        }
+💻 SCSS / CSS Kod
+SCSS
+// ==========================================
+// 1. PLACEHOLDERS (DRY Prinsipi uchun)
+// ==========================================
 
-        /* 2. Checkbox tanlanganda (checked bo'lganda) o'zgaruvchilar qiymati qorong'u tema uchun o'zgaradi */
-        body:has(#theme-toggle:checked) {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --text-color: #f8fafc;
-            --text-muted: #94a3b8;
-            --primary-color: #38bdf8;
-            --primary-hover: #0ea5e9;
-            --border-color: #334155;
-            --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-        }
+// Asosiy kartochka stili uchun placeholder
+%base-card {
+    background-color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+    padding: 20px;
+    border: 1px solid #e2e8f0;
+}
 
-        /* Umumiy sahifa sozlamalari */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
+// Elementlarni markazga keltirish uchun placeholder
+%flex-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
-        /* Yashirin checkbox */
-        #theme-toggle {
-            display: none;
-        }
 
-        /* Asosiy konteyner (Kartochka) */
-        .wrapper {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-            padding: 40px;
-            width: 100%;
-            max-width: 400px;
-            box-sizing: border-box;
-            transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-        }
+// ==========================================
+// 2. ALERT KOMPONENTI (@extend bilan)
+// ==========================================
 
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: var(--spacing-lg);
-        }
+.alert {
+    @extend %base-card; // Asosiy xususiyatlarni meros qilib olamiz
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 16px;
 
-        h2 {
-            margin: 0;
-            font-size: 22px;
-        }
+    // Variantlar
+    &--success {
+        background-color: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #166534;
+    }
 
-        /* Switch Label dizayni */
-        .theme-switch-label {
-            cursor: pointer;
-            background-color: var(--border-color);
-            border: 2px solid var(--border-color);
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            transition: background-color 0.2s, border-color 0.2s;
-            user-select: none;
-        }
+    &--warning {
+        background-color: #fefce8;
+        border-color: #fef08a;
+        color: #854d0e;
+    }
 
-        .theme-switch-label:hover {
-            border-color: var(--primary-color);
-        }
+    &--error {
+        background-color: #fef2f2;
+        border-color: #fecaca;
+        color: #991b1b;
+    }
+}
 
-        /* Matnlar */
-        p {
-            color: var(--text-muted);
-            line-height: 1.6;
-            margin-bottom: var(--spacing-lg);
-            font-size: 15px;
-        }
 
-        /* Tugma */
-        .btn {
-            display: block;
-            width: 100%;
-            background-color: var(--primary-color);
-            color: #ffffff;
-            border: none;
-            padding: 12px;
-            border-radius: var(--spacing-sm);
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            text-align: center;
-            text-decoration: none;
-            box-sizing: border-box;
-            transition: background-color 0.2s;
-        }
+// ==========================================
+// 3. BADGE KOMPONENTI (4 ta variant)
+// ==========================================
 
-        .btn:hover {
-            background-color: var(--primary-hover);
-        }
+.badge {
+    @extend %flex-center;
+    display: inline-flex; // %flex-center dagi flex'ni qo'shimcha sozlash uchun
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
 
-        /* Dinamik matn almashtirish (Yorug' / Qorong'u holatiga qarab label ichidagi matn o'zgaradi) */
-        .theme-switch-label .dark-text {
-            display: inline;
-        }
-        .theme-switch-label .light-text {
-            display: none;
-        }
+    // 1-variant: Primary
+    &--primary {
+        background-color: #eff6ff;
+        color: #1d4ed8;
+    }
 
-        /* Checkbox yoqilganda label ichidagi matn va ikonkalarni o'zgartirish */
-        body:has(#theme-toggle:checked) .theme-switch-label .dark-text {
-            display: none;
-        }
-        body:has(#theme-toggle:checked) .theme-switch-label .light-text {
-            display: inline;
-        }
-    </style>
-</head>
-<body>
+    // 2-variant: Success
+    &--success {
+        background-color: #f0fdf4;
+        color: #15803d;
+    }
 
-    <!-- Yashirin Checkbox -->
-    <input type="checkbox" id="theme-toggle">
+    // 3-variant: Warning
+    &--warning {
+        background-color: #fffbeb;
+        color: #b45309;
+    }
 
-    <div class="wrapper">
-        <div class="header">
-            <h2>Tema sozlamasi</h2>
-            <!-- Label checkboxni boshqaradi -->
-            <label for="theme-toggle" class="theme-switch-label">
-                <span class="dark-text">🌙 Qorong'u</span>
-                <span class="light-text">☀️ Yorug'</span>
-            </label>
-        </div>
+    // 4-variant: Danger
+    &--danger {
+        background-color: #fef2f2;
+        color: #b91c1c;
+    }
+}
 
-        <p>
-            Ushbu sahifa to'liq CSS texnologiyalari yordamida yaratilgan. Hech qanday JavaScript kodidan foydalanilmagan. Ranglar va o'lchamlar faqatgina CSS o'zgaruvchilari orqali boshqariladi.
-        </p>
 
-        <a href="#" class="btn">Tugmani sinash</a>
-    </div>
+// ==========================================
+// 4. CARD KOMPONENTI
+// ==========================================
 
-</body>
-</html>
+.card {
+    @extend %base-card;
+    max-width: 400px;
+
+    &__header {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 8px;
+    }
+
+    &__body {
+        font-size: 14px;
+        color: #64748b;
+        line-height: 1.5;
+    }
+}
+
+
+// ==========================================
+// 5. @extend VA @mixin FARQI HAQIDA IZOH
+// ==========================================
+/*
+  ============================================================
+  @extend va @mixin FARQI:
+  ============================================================
+  
+  1. @extend (Meros olish):
+     - Tanlangan selektorning barcha uslublarini boshqa selektorga ko'chiradi.
+     - CSS kod hajmini tejaydi (kodni guruhlaydi: `.class1, .class2 { ... }`).
+     - Parametrlar (argumentlar) qabul qila olmaydi.
+     - Statik uslublarni takrorlamaslik uchun juda qulay.
+
+  2. @mixin (Funksiya/Blok yaratish):
+     - Xuddi funksiyaga o'xshaydi va o'ziga argumentlar (qiymatlar) qabul qilishi mumkin.
+     - Har safar chaqirilganda, CSS kodini o'sha joyga to'g'ridan-to'g'ri nusxalab qo'yadi (duplicate code hosil qilishi mumkin).
+     - Dinamik, qiymatlari o'zgarib turadigan uslublar uchun ishlatiladi.
+  ============================================================
+*/
