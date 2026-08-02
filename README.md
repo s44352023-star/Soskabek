@@ -4,219 +4,216 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sticky Nav & Tooltip Position Namunasi</title>
+    <title>Developer Profil Kartochkalari</title>
     <style>
-        /* Umumiy sozlamalar va smooth scroll */
-        html {
-            scroll-behavior: smooth;
-        }
-
+        /* Umumiy sahifa sozlamalari */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f6f9;
+            background-color: #f0f4f8;
             color: #333;
-        }
-
-        /* 1. position: sticky bilan nav */
-        .sticky-nav {
-            position: sticky;
-            top: 0;
-            background-color: #2c3e50;
-            color: #ffffff;
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 1000; /* Boshqa elementlar ustida turishi uchun */
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-        }
-
-        .sticky-nav .logo {
-            font-size: 20px;
-            font-weight: bold;
-            letter-spacing: 1px;
-        }
-
-        .sticky-nav ul {
-            list-style: none;
             margin: 0;
-            padding: 0;
+            padding: 40px 20px;
             display: flex;
-            gap: 20px;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
         }
 
-        .sticky-nav ul li a {
-            color: #ffffff;
-            text-decoration: none;
-            font-size: 14px;
-            transition: color 0.2s;
-        }
-
-        .sticky-nav ul li a:hover {
-            color: #3498db;
-        }
-
-        /* Asosiy kontent konteyneri */
-        .container {
-            max-width: 1000px;
-            margin: 40px auto;
-            padding: 0 20px;
-        }
-
-        h2 {
+        h1 {
+            color: #1e293b;
+            margin-bottom: 40px;
+            font-size: 28px;
             text-align: center;
-            margin-bottom: 30px;
-            color: #2c3e50;
         }
 
-        /* Kartochkalar paneli */
-        .cards-grid {
+        /* CSS Grid konteyneri */
+        .developers-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
             gap: 30px;
-            margin-bottom: 50px;
+            width: 100%;
+            max-width: 1100px;
         }
 
-        /* 2. relative ota element */
-        .card {
-            position: relative; 
+        /* Kartochka dizayni */
+        .dev-card {
             background: #ffffff;
-            border-radius: 10px;
-            padding: 25px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            padding: 30px 20px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            /* Silliq animatsiya uchun transition */
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        /* Hover effekti */
+        .dev-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
         }
 
-        .card h3 {
-            margin-top: 0;
-            color: #2c3e50;
+        /* Profil rasmi (Doira shaklida) */
+        .dev-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-bottom: 20px;
+            border: 3px solid #3b82f6;
+            padding: 3px;
+            background-color: #ffffff;
+            transition: transform 0.3s ease;
         }
 
-        .card p {
-            color: #666;
+        .dev-card:hover .dev-avatar {
+            transform: scale(1.05);
+        }
+
+        /* Ism va lavozim */
+        .dev-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 0 0 8px 0;
+        }
+
+        .dev-role {
             font-size: 14px;
+            color: #64748b;
+            font-weight: 500;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .dev-bio {
+            font-size: 13px;
+            color: #475569;
             line-height: 1.5;
+            margin-bottom: 20px;
+            flex-grow: 1;
         }
 
-        /* 3. position: absolute bilan badge / tooltip */
-        .card-tooltip {
-            position: absolute;
-            top: -12px;
-            right: 15px;
-            background-color: #e74c3c;
-            color: white;
-            padding: 5px 12px;
-            font-size: 12px;
-            font-weight: bold;
-            border-radius: 20px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            z-index: 10; /* Kartochka ichidagi qatlamlar ustida turishi uchun */
+        /* Ijtimoiy tarmoq havolalari / Tugmalar */
+        .dev-socials {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            width: 100%;
+            justify-content: center;
         }
 
-        .card-tooltip.pro {
-            background-color: #3498db;
-        }
-
-        .card-tooltip.sale {
-            background-color: #2ecc71;
-        }
-
-        /* Sahifani uzun qilish uchun qo'shimcha bo'lim */
-        .content-section {
-            background: #ffffff;
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 50px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        }
-
-        /* 4. position: fixed bilan floating 'Yuqoriga' tugmasi */
-        .scroll-top-btn {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background-color: #2c3e50;
-            color: white;
-            width: 45px;
-            height: 45px;
+        .social-link {
+            text-decoration: none;
+            background-color: #f1f5f9;
+            color: #475569;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             display: flex;
-            justify-content: center;
             align-items: center;
-            text-decoration: none;
-            font-size: 18px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-            z-index: 999;
-            transition: background-color 0.2s, transform 0.2s;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background-color 0.2s, color 0.2s;
         }
 
-        .scroll-top-btn:hover {
-            background-color: #3498db;
-            transform: scale(1.1);
+        .social-link:hover {
+            background-color: #3b82f6;
+            color: #ffffff;
+        }
+
+        /* Asosiy tugma stillashtirish */
+        .dev-btn {
+            display: inline-block;
+            width: 100%;
+            padding: 10px 0;
+            background-color: #3b82f6;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+
+        .dev-btn:hover {
+            background-color: #2563eb;
+            box-shadow: 0 6px 15px rgba(59, 130, 246, 0.4);
         }
     </style>
 </head>
-<body id="top">
+<body>
 
-    <!-- Sticky Nav -->
-    <nav class="sticky-nav">
-        <div class="logo">PositionLab</div>
-        <ul>
-            <li><a href="#cards">Kartochkalar</a></li>
-            <li><a href="#about">Haqida</a></li>
-            <li><a href="#contact">Aloqa</a></li>
-        </ul>
-    </nav>
+    <h1>Bizning Dasturchilar Jamoasi</h1>
 
-    <div class="container">
-        <h2 id="cards">Position Xususiyatlari Namunasi</h2>
-
-        <!-- 3 ta kartochka -->
-        <div class="cards-grid">
-            <!-- 1-kartochka -->
-            <div class="card">
-                <span class="card-tooltip">Yangi</span>
-                <h3>Starter Paket</h3>
-                <p>Boshlang'ich darajadagilar uchun maxsus imkoniyatlar va qulay shart-lar to'plami.</p>
+    <!-- CSS Grid konteyneri -->
+    <div class="developers-grid">
+        
+        <!-- 1-Dasturchi -->
+        <div class="dev-card">
+            <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80" alt="Profil rasmi" class="dev-avatar">
+            <h3 class="dev-name">Malika Karimova</h3>
+            <span class="dev-role">Frontend Developer</span>
+            <p class="dev-bio">React va Vue.js texnologiyalari mutaxassisi. Foydalanuvchilar uchun qulay interfeyslar yaratadi.</p>
+            <div class="dev-socials">
+                <a href="#" class="social-link">GH</a>
+                <a href="#" class="social-link">IN</a>
+                <a href="#" class="social-link">TG</a>
             </div>
-
-            <!-- 2-kartochka -->
-            <div class="card">
-                <span class="card-tooltip pro">Tavsiya etiladi</span>
-                <h3>Pro Paket</h3>
-                <p>Professional foydalanuvchilar uchun kengaytirilgan funksiyalar va tezkor yordam.</p>
-            </div>
-
-            <!-- 3-kartochka -->
-            <div class="card">
-                <span class="card-tooltip sale">Aksiya -20%</span>
-                <h3>VIP Paket</h3>
-                <p>Barcha imkoniyatlar jamlanmasi hamda shaxsiy menejer xizmati bilan ta'minlanadi.</p>
-            </div>
+            <a href="#" class="dev-btn">Profilni ko'rish</a>
         </div>
 
-        <div class="content-section" id="about">
-            <h3>Position haqida qisqacha</h3>
-            <p><strong>Sticky:</strong> Sahifa skroll qilinganda element belgilangan nuqtaga (masalan, `top: 0`) kelgach yopishib qoladi.</p>
-            <p><strong>Relative & Absolute:</strong> Ota elementga `position: relative` berilganda, uning ichidagi bola element `position: absolute` yordamida aynan ota element chegarasida aniq joylashadi.</p>
-            <p><strong>Fixed:</strong> Sahifa skroll qilinishidan qat'i nazar, ekran oynasiga nisbatan doimiy joyda turadi (masalan, pastdagi tugma).</p>
+        <!-- 2-Dasturchi -->
+        <div class="dev-card">
+            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80" alt="Profil rasmi" class="dev-avatar">
+            <h3 class="dev-name">Jasur Alimov</h3>
+            <span class="dev-role">Backend Developer</span>
+            <p class="dev-bio">Node.js va Python yordamida xavfsiz hamda yuqori unumdor server arxitekturasini tuzadi.</p>
+            <div class="dev-socials">
+                <a href="#" class="social-link">GH</a>
+                <a href="#" class="social-link">IN</a>
+                <a href="#" class="social-link">TG</a>
+            </div>
+            <a href="#" class="dev-btn">Profilni ko'rish</a>
         </div>
 
-        <div class="content-section" id="contact">
-            <h3>Aloqa ma'lumotlari</h3>
-            <p>Savollar bo'yicha biz bilan bog'lanishingiz mumkin. Sahifani yuqoriga chiqarish uchun pastdagi tugmani bosing.</p>
+        <!-- 3-Dasturchi -->
+        <div class="dev-card">
+            <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80" alt="Profil rasmi" class="dev-avatar">
+            <h3 class="dev-name">Zuxra Tursunova</h3>
+            <span class="dev-role">UI/UX Designer</span>
+            <p class="dev-bio">Figma va Adobe XD ustasi. Har bir mahsulot dizaynini mukammal darajada ishlab chiqadi.</p>
+            <div class="dev-socials">
+                <a href="#" class="social-link">BE</a>
+                <a href="#" class="social-link">IN</a>
+                <a href="#" class="social-link">TG</a>
+            </div>
+            <a href="#" class="dev-btn">Profilni ko'rish</a>
         </div>
+
+        <!-- 4-Dasturchi -->
+        <div class="dev-card">
+            <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80" alt="Profil rasmi" class="dev-avatar">
+            <h3 class="dev-name">Sardor Rahimov</h3>
+            <span class="dev-role">Full Stack Developer</span>
+            <p class="dev-bio">To'liq sikldagi loyihalar ustida ishlaydi. Ma'lumotlar bazasi va mijoz qismini birdek mukammal qoradi.</p>
+            <div class="dev-socials">
+                <a href="#" class="social-link">GH</a>
+                <a href="#" class="social-link">IN</a>
+                <a href="#" class="social-link">TG</a>
+            </div>
+            <a href="#" class="dev-btn">Profilni ko'rish</a>
+        </div>
+
     </div>
-
-    <!-- Floating 'Yuqoriga' tugmasi (Fixed) -->
-    <a href="#top" class="scroll-top-btn" title="Yuqoriga qaytish">↑</a>
 
 </body>
 </html>
