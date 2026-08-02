@@ -1,103 +1,170 @@
-1. backend/server.js — Production uchun CORS va Environment Variables
-Express serverda CORS ni faqat production frontend domeniga ruxsat beradigan va localhost'ni qattiq yozmaydigan qilib sozlash:
+💻 Kod (HTML + CSS)
+HTML
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chiroyli Narxlar Jadvali</title>
+    <style>
+        /* Umumiy sahifa dizayni */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
 
-JavaScript
-const express = require('express');
-const cors = require('cors');
-const { Pool } = require('pg');
+        /* Jadval konteyneri */
+        .table-container {
+            width: 90%;
+            max-width: 900px;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+        }
 
-const app = express();
+        /* Jadval asosiy qismi */
+        .pricing-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 15px;
+        }
 
-// CORS sozlamalari (Production frontend domeni .env orqali keladi)
-const allowedOrigins = [
-  process.env.FRONTEND_URL, // Masalan: https://my-todo-app.vercel.app
-  // Qo'shimcha domenlar kerak bo'lsa shu yerga qo'shiladi
-].filter(Boolean);
+        /* Sarlavha va Pastki qism umumiy bezagi */
+        .pricing-table th, 
+        .pricing-table td {
+            padding: 14px 18px;
+            border-bottom: 1px solid #e0e0e0;
+        }
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // Agar Postman yoki mobile app kabi origin yo'l qo'yilmagan so'rovlar bo'lsa hamda dev muhitida bo'lmasa
-    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS siyosati bu domendan kelgan soʻrovni blokladi'));
-    }
-  },
-  credentials: true
-}));
+        /* thead dizayni */
+        .pricing-table thead th {
+            background-color: #2c3e50;
+            color: #ffffff;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 0.5px;
+        }
 
-app.use(express.json());
+        .pricing-table thead th:first-child {
+            border-top-left-radius: 8px;
+        }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+        .pricing-table thead th:last-child {
+            border-top-right-radius: 8px;
+        }
 
-// Asosiy health check endpoint
-app.get('/health', async (req, res) => {
-  try {
-    await pool.query('SELECT 1');
-    res.status(200).json({ status: 'OK', database: 'connected' });
-  } catch (err) {
-    res.status(500).json({ status: 'ERROR', error: err.message });
-  }
-});
+        /* Zebra striping (juft qatorlarni bo'yash) */
+        .pricing-table tbody tr:nth-child(even) {
+            background-color: #f9fbfb;
+        }
 
-// Tasklar va boshqa endpointlar...
+        /* Hover effect (sichqoncha borgandagi holat) */
+        .pricing-table tbody tr:hover {
+            background-color: #f1f8ff;
+            transition: background-color 0.2s ease-in-out;
+        }
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server ${PORT}-portda muvaffaqiyatli ishga tushdi.`);
-});
-2. Frontend API Konfiguratsiyasi (frontend/src/api.js)
-Frontend qismida API manzili localhost o'rniga production backend URL (VITE_API_URL yoki mos keluvchi env o'zgaruvchi) ga sozlangan bo'lishi kerak:
+        /* Matn tekislash va shriftlar */
+        .pricing-table td.price,
+        .pricing-table td.qty,
+        .pricing-table td.total {
+            text-align: right;
+        }
 
-JavaScript
-import axios from 'axios';
+        .pricing-table th.price,
+        .pricing-table th.qty,
+        .pricing-table th.total {
+            text-align: right;
+        }
 
-// Muhit o'zgaruvchisidan backend URL ni olish (Vercel/Netlify da belgilanadi)
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://your-backend-service.railway.app';
+        /* tfoot dizayni */
+        .pricing-table tfoot td {
+            font-weight: bold;
+            background-color: #ecf0f1;
+            color: #2c3e50;
+        }
 
-export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+        .pricing-table tfoot tr:last-child td:first-child {
+            border-bottom-left-radius: 8px;
+        }
 
-// Tokenni avtomatik qo'shish uchun interceptor
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-3. README.md — To'liq Yakuniy Hujjat va 6/6 Bosqich Checklist'i
-Markdown
-# Full-Stack Todo & Task Management Application
+        .pricing-table tfoot tr:last-child td:last-child {
+            border-bottom-right-radius: 8px;
+        }
 
-Production darajasida ishlab chiqilgan, xavfsiz va zamonaviy Full-Stack Todo ilovasi. Backend **Railway/Render** da, Frontend эса **Vercel/Netlify** da to'liq deploy qilingan va jonli ishlamoqda.
+        /* Maxsus urg'u uchun */
+        .category-row {
+            background-color: #e8f4fd !important;
+            font-weight: bold;
+            color: #1d6fa5;
+        }
+    </style>
+</head>
+<body>
 
-## 🔗 Jonli Havolalar (Live Demos)
-- **Frontend (Vercel):** [https://my-todo-app.vercel.app](https://my-todo-app.vercel.app)
-- **Backend API (Railway):** [https://your-backend-service.railway.app/health](https://your-backend-service.railway.app/health)
+<div class="table-container">
+    <table class="pricing-table">
+        <thead>
+            <tr>
+                <th>Nom</th>
+                <th>Tavsif</th>
+                <th class="price">Narx</th>
+                <th class="qty">Soni</th>
+                <th class="total">Jami</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Rowspan misoli uchun kategoriya -->
+            <tr class="category-row">
+                <td colspan="5">Kategoriya: Veb Dasturlash xizmatlari</td>
+            </tr>
+            <tr>
+                <td>Landing Page</td>
+                <td>Bir sahifali zamonaviy veb-sayt dizayni va dasturlashi</td>
+                <td class="price">$300</td>
+                <td class="qty">1</td>
+                <td class="total">$300</td>
+            </tr>
+            <tr>
+                <td>E-commerce</td>
+                <td>To'liq internet do'kon, to'lov tizimlari bilan</td>
+                <td class="price">$1,200</td>
+                <td class="qty">1</td>
+                <td class="total">$1,200</td>
+            </tr>
+            <tr>
+                <td>Texnik yordam</td>
+                <td>Har oylik sayt xavfsizligi va yangilanishi</td>
+                <td class="price">$50</td>
+                <td class="qty">3</td>
+                <td class="total">$150</td>
+            </tr>
+            <tr>
+                <td>SEO Optimization</td>
+                <td>Qidiruv tizimlarida birinchi o'rinlarga chiqarish</td>
+                <td class="price">$200</td>
+                <td class="qty">2</td>
+                <td class="total">$400</td>
+            </tr>
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4" style="text-align: right;">Umumiy Hisob:</td>
+                <td class="total">$2,050</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
 
----
-
-## 🛠️ Texnologiyalar To'plami
-- **Frontend:** React.js / Vite, Axios, Tailwind CSS
-- **Backend:** Node.js, Express.js
-- **Database:** PostgreSQL (Cloud hosted)
-- **Deployment & Security:** Render, Vercel, CORS, Environment Variables
-
----
-
-## 📋 6/6 Bosqich Yakunlangan Checklist
-
-- [x] **1. Backend Deployment**: Backend haqiqiy hostingda (Railway/Render) muvaffaqiyatli ishga tushirildi va ishlayapti.
-- [x] **2. Frontend Deployment**: Frontend haqiqiy hostingda (Vercel/Netlify) build qilinib, deploy qilindi.
-- [x] **3. CORS Konfiguratsiyasi**: CORS xavfsizlik siyosati production frontend domeniga to'g'ri moslashtirildi (`localhost` qattiq yozilmadi).
-- [x] **4. API Integratsiyasi**: Frontend ilovasidagi API so'rovlari manzili production backend domeniga ulandi.
-- [x] **5. Jonli Funksionallik Testi**: Ro'yxatdan o'tish, tizimga kirish, task qo'shish/o'chirish va qidiruv funksiyalari jonli saytda to'liq ishlamoqda.
-- [x] **6. Hujjatlashtirish va Repo**: README.md faylida jonli havolalar va to'liq texnologik t
+</body>
+</html>
