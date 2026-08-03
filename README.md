@@ -1,140 +1,99 @@
-💻 SCSS / CSS Kod
-SCSS
-// ==========================================
-// 1. PLACEHOLDERS (DRY Prinsipi uchun)
-// ==========================================
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Portfolio Grid</title>
+    <!-- Bootstrap 5 CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
 
-// Asosiy kartochka stili uchun placeholder
-%base-card {
-    background-color: #ffffff;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-    padding: 20px;
-    border: 1px solid #e2e8f0;
-}
+    <!-- Portfolio Section -->
+    <section class="py-5">
+        <div class="container">
+            <h2 class="text-center mb-5 fw-bold">Mening Portfoliyim</h2>
+            
+            <!-- Row with g-4 gap -->
+            <div class="row g-4">
+                
+                <!-- 1-karta -->
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-0">
+                        <img src="https://via.placeholder.com/400x250" class="card-img-top" alt="Loyihaning rasmi">
+                        <div class="card-body">
+                            <h5 class="card-title">Loyiha nomi 1</h5>
+                            <p class="card-text text-muted">Bu yerda loyiha haqida qisqacha ma'lumot yoziladi. Zamonaviy dizayn va texnologiyalar.</p>
+                            <a href="#" class="btn btn-primary btn-sm">Batafsil</a>
+                        </div>
+                    </div>
+                </div>
 
-// Elementlarni markazga keltirish uchun placeholder
-%flex-center {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
+                <!-- 2-karta -->
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-0">
+                        <img src="https://via.placeholder.com/400x250" class="card-img-top" alt="Loyihaning rasmi">
+                        <div class="card-body">
+                            <h5 class="card-title">Loyiha nomi 2</h5>
+                            <p class="card-text text-muted">Bu yerda loyiha haqida qisqacha ma'lumot yoziladi. Zamonaviy dizayn va texnologiyalar.</p>
+                            <a href="#" class="btn btn-primary btn-sm">Batafsil</a>
+                        </div>
+                    </div>
+                </div>
 
+                <!-- 3-karta -->
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-0">
+                        <img src="https://via.placeholder.com/400x250" class="card-img-top" alt="Loyihaning rasmi">
+                        <div class="card-body">
+                            <h5 class="card-title">Loyiha nomi 3</h5>
+                            <p class="card-text text-muted">Bu yerda loyiha haqida qisqacha ma'lumot yoziladi. Zamonaviy dizayn va texnologiyalar.</p>
+                            <a href="#" class="btn btn-primary btn-sm">Batafsil</a>
+                        </div>
+                    </div>
+                </div>
 
-// ==========================================
-// 2. ALERT KOMPONENTI (@extend bilan)
-// ==========================================
+                <!-- 4-karta -->
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-0">
+                        <img src="https://via.placeholder.com/400x250" class="card-img-top" alt="Loyihaning rasmi">
+                        <div class="card-body">
+                            <h5 class="card-title">Loyiha nomi 4</h5>
+                            <p class="card-text text-muted">Bu yerda loyiha haqida qisqacha ma'lumot yoziladi. Zamonaviy dizayn va texnologiyalar.</p>
+                            <a href="#" class="btn btn-primary btn-sm">Batafsil</a>
+                        </div>
+                    </div>
+                </div>
 
-.alert {
-    @extend %base-card; // Asosiy xususiyatlarni meros qilib olamiz
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 15px;
-    font-weight: 500;
-    margin-bottom: 16px;
+                <!-- 5-karta -->
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-0">
+                        <img src="https://via.placeholder.com/400x250" class="card-img-top" alt="Loyihaning rasmi">
+                        <div class="card-body">
+                            <h5 class="card-title">Loyiha nomi 5</h5>
+                            <p class="card-text text-muted">Bu yerda loyiha haqida qisqacha ma'lumot yoziladi. Zamonaviy dizayn va texnologiyalar.</p>
+                            <a href="#" class="btn btn-primary btn-sm">Batafsil</a>
+                        </div>
+                    </div>
+                </div>
 
-    // Variantlar
-    &--success {
-        background-color: #f0fdf4;
-        border-color: #bbf7d0;
-        color: #166534;
-    }
+                <!-- 6-karta -->
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-0">
+                        <img src="https://via.placeholder.com/400x250" class="card-img-top" alt="Loyihaning rasmi">
+                        <div class="card-body">
+                            <h5 class="card-title">Loyiha nomi 6</h5>
+                            <p class="card-text text-muted">Bu yerda loyiha haqida qisqacha ma'lumot yoziladi. Zamonaviy dizayn va texnologiyalar.</p>
+                            <a href="#" class="btn btn-primary btn-sm">Batafsil</a>
+                        </div>
+                    </div>
+                </div>
 
-    &--warning {
-        background-color: #fefce8;
-        border-color: #fef08a;
-        color: #854d0e;
-    }
+            </div>
+        </div>
+    </section>
 
-    &--error {
-        background-color: #fef2f2;
-        border-color: #fecaca;
-        color: #991b1b;
-    }
-}
-
-
-// ==========================================
-// 3. BADGE KOMPONENTI (4 ta variant)
-// ==========================================
-
-.badge {
-    @extend %flex-center;
-    display: inline-flex; // %flex-center dagi flex'ni qo'shimcha sozlash uchun
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-
-    // 1-variant: Primary
-    &--primary {
-        background-color: #eff6ff;
-        color: #1d4ed8;
-    }
-
-    // 2-variant: Success
-    &--success {
-        background-color: #f0fdf4;
-        color: #15803d;
-    }
-
-    // 3-variant: Warning
-    &--warning {
-        background-color: #fffbeb;
-        color: #b45309;
-    }
-
-    // 4-variant: Danger
-    &--danger {
-        background-color: #fef2f2;
-        color: #b91c1c;
-    }
-}
-
-
-// ==========================================
-// 4. CARD KOMPONENTI
-// ==========================================
-
-.card {
-    @extend %base-card;
-    max-width: 400px;
-
-    &__header {
-        font-size: 18px;
-        font-weight: 700;
-        color: #1e293b;
-        margin-bottom: 8px;
-    }
-
-    &__body {
-        font-size: 14px;
-        color: #64748b;
-        line-height: 1.5;
-    }
-}
-
-
-// ==========================================
-// 5. @extend VA @mixin FARQI HAQIDA IZOH
-// ==========================================
-/*
-  ============================================================
-  @extend va @mixin FARQI:
-  ============================================================
-  
-  1. @extend (Meros olish):
-     - Tanlangan selektorning barcha uslublarini boshqa selektorga ko'chiradi.
-     - CSS kod hajmini tejaydi (kodni guruhlaydi: `.class1, .class2 { ... }`).
-     - Parametrlar (argumentlar) qabul qila olmaydi.
-     - Statik uslublarni takrorlamaslik uchun juda qulay.
-
-  2. @mixin (Funksiya/Blok yaratish):
-     - Xuddi funksiyaga o'xshaydi va o'ziga argumentlar (qiymatlar) qabul qilishi mumkin.
-     - Har safar chaqirilganda, CSS kodini o'sha joyga to'g'ridan-to'g'ri nusxalab qo'yadi (duplicate code hosil qilishi mumkin).
-     - Dinamik, qiymatlari o'zgarib turadigan uslublar uchun ishlatiladi.
-  ============================================================
-*/
+    <!-- Bootstrap 5 JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
